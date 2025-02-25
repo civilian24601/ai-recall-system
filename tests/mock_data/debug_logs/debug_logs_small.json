@@ -1,0 +1,53 @@
+[
+    {
+      "id": "log_20250212_090000",
+      "timestamp": "2025-02-12 09:00:00",
+      "error": "ZeroDivisionError: division by zero",
+      "stack_trace": "File 'math_ops_mock.py', line 12, in divide_numbers",
+      "fix_attempted": "def divide_numbers(a, b):\n    if b == 0:\n        print('Error: Division by zero!')\n        return None\n    return a / b",
+      "fix_successful": false,
+      "execution_time": 2.45,
+      "resolved": false
+    },
+    {
+      "id": "log_20250212_090500",
+      "timestamp": "2025-02-12 09:05:00",
+      "error": "KeyError: 'username'",
+      "stack_trace": "File 'user_auth_mock.py', line 20, in authenticate_user",
+      "fix_attempted": "def authenticate_user(user_data):\n    return user_data.get('username', 'guest')",
+      "fix_successful": true,
+      "execution_time": 1.8,
+      "resolved": true
+    },
+    {
+      "id": "log_20250212_091000",
+      "timestamp": "2025-02-12 09:10:00",
+      "error": "Database connection timeout",
+      "stack_trace": "File 'db_handler_mock.py', line 30, in connect_to_database",
+      "fix_attempted": "def fix_db_timeout():\n    print('Increased connection timeout to 120s')\n    return True",
+      "fix_successful": true,
+      "execution_time": 3.1,
+      "resolved": true
+    },
+    {
+      "id": "log_20250212_092000",
+      "timestamp": "2025-02-12 09:20:00",
+      "error": "NameError: name 'model' is not defined",
+      "stack_trace": "File 'test_api_handler_mock.py', line 18, in predict",
+      "fix_attempted": "import joblib\nmodel = joblib.load('models/my_model.pkl')\n\n# The rest of the code that uses 'model'",
+      "fix_successful": false,
+      "execution_time": 2.0,
+      "resolved": false
+    },
+    {
+      "id": "log_20250212_093000",
+      "timestamp": "2025-02-12 09:30:00",
+      "error": "Catastrophic meltdown: index out of range",
+      "stack_trace": "File 'aggregator_search_mock.py', line 45, in search_snippets",
+      "fix_attempted": "def safe_aggregator_search(data, idx):\n    if idx < len(data):\n        return data[idx]\n    print('Index out of range!')\n    return None",
+      "fix_successful": true,
+      "execution_time": 4.2,
+      "resolved": true
+    }
+  ]
+  

@@ -1,0 +1,127 @@
+[
+    {
+      "id": "log_2025-02-12_090000",
+      "timestamp": "2025-02-12 09:00:00",
+      "error": "ZeroDivisionError: division by zero",
+      "stack_trace": "File 'math_ops_mock.py', line 12, in divide_numbers",
+      "fix_attempted": "def divide_numbers(a, b):\n    if b == 0: return None\n    return a / b"
+      "fix_successful": true
+      "execution_time": 2.3,
+      "resolved": true
+    },
+  
+    {
+      "id": "log_2025-02-12_090100",
+      "timestamp": "2025-02-12 09:01:00",
+      "error": "KeyError: 'username'",
+      "stack_trace": "File 'auth_mock.py', line 22, in login_user",
+      "fix_attempted": "def login_user(data):\n    return data['username']",
+      "fix_successful": false
+  
+    {
+      "id": "log_2025-02-12_090200",
+      "timestamp": "2025-02-12 09:02:00",
+      "error": "Database connection timeout",
+      "stack_trace": "File 'db_handler_mock.py', line 30, in connect",
+      fix_attempted: "def fix_db_timeout():\n    print('Timeout set to 120s')\n    return True",
+      "fix_successful": true,
+      execution_time: 3.0,
+      "resolved": true
+    },
+  
+    // #4 Extra trailing comma in the object
+    {
+      "id": "log_2025-02-12_090300",
+      "timestamp": "2025-02-12 09:03:00",
+      "error": "NameError: name 'model' is not defined",
+      "stack_trace": "File 'api_predict_mock.py', line 18, in run_prediction",
+      "fix_attempted": "import joblib\nmodel = joblib.load('model.pkl')\nprint(model.predict([1,2,3]))",
+      "fix_successful": false,
+      "execution_time": 2.5,
+      "resolved": false,
+    },
+  
+    {
+      "id": "log_2025-02-12_090400",
+      "timestamp": "2025-02-12 09:04:00",
+      "error": "TypeError: unsupported operand type(s) for +: 'str' and 'int'",
+      "stack_trace": "File 'string_ops_mock.py', line 10, in combine_data",
+      "fix_attempted": "def combine_data(a, b):\n    return str(a) + str(b)",
+      "fix_successful": true
+      "execution_time": 1.8,
+      "resolved": true
+    }
+  
+    {
+      "id": "log_2025-02-12_090500",
+      "timestamp": "2025-02-12 09:05:00",
+      "error" "ValueError: invalid literal for int()",
+      "stack_trace": "File 'conversion_mock.py', line 14, in parse_int",
+      "fix_attempted": "def parse_int(val):\n    try:\n        return int(val)\n    except ValueError:\n        return 0",
+      "fix_successful": true,
+      "execution_time": 2.1,
+      "resolved": true
+    },
+  
+    {
+      "id": "log_2025-02-12_090600",
+      "timestamp": "2025-02-12 09:06:00",
+      "error": "Catastrophic meltdown: memory overflow",
+      "stack_trace": "File 'aggregator_mock.py', line 45, in handle_data",
+      "fix_attempted": "def handle_data(data):\n    # Introduce streaming approach\n    pass,
+      "fix_successful": false,
+      "execution_time": 4.2,
+      "resolved": false
+    },
+  
+    {
+      "id": "log_2025-02-12_090700",
+      "timestamp": "2025-02-12 09:07:00",
+      "error": "ZeroDivisionError: division by zero",
+      "stack_trace": "File 'calc_metrics_mock.py', line 22, in ratio_calc",
+      "fix_attempted": "def ratio_calc(x, y):\n    return x / y if y != 0 else 
+      "fix_successful": true,
+      "execution_time": 2.7
+    },
+  
+    {
+      "id": "log_2025-02-12_090800",
+      "timestamp": "2025-02-12 09:08:00",
+      "error": "Catastrophic meltdown: index out of range",
+      "stack_trace": "File 'array_ops_mock.py', line 33, in fetch_item",
+      "fix_attempted": "def fetch_item(arr, idx):{{ if idx>=len(arr): return None}}", 
+      "fix_successful": true,
+      "execution_time": 3.5,
+      "resolved": true
+    },
+  
+    {
+      "id": "log_2025-02-12_090900",
+      "timestamp": "2025-02-12 09:09:00",
+      "error": "KeyError: 'username'",
+      "stack_trace": "File 'auth_mock.py', line 38, in process_user",
+      "fix_attempted": "def process_user(d):\n    if 'username' not in d:\n        d['username']='guest'",
+      "fix_successful": false,
+      "execution_time": 1.6,
+      "resolved": false
+  
+    {
+      "id": "log_2025-02-12_091000",
+      "timestamp": "2025-02-12 09:10:00",
+      "error": "Database connection timeout",
+      "stack_trace": "File 'db_handler_mock.py', line 50, in connect",
+      "fix_attempted": "def connect_db():\n    return [True]]",
+      "fix_successful": true,
+      "execution_time": 3.4,
+      "resolved": true
+    },
+      {
+      "id": "log_2025-02-12_091100",
+      "timestamp": "2025-02-12 09:11:00",
+      "error": "ValueError: not valid json",
+      "stack_trace": "File 'convert_mock.py', line 14, in parse_val",
+      "fix_attempted": "def parse_val(x):\n    return int(x)",
+      "fix_successful": false,
+      "execution_time": 2.2,
+      "resolved": false
+  

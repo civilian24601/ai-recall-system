@@ -1,0 +1,223 @@
+/mnt/f/projects/ai-recall-system
+├── __pycache__
+│   └── core_architecture.cpython-310.pyc
+├── agent_knowledge_bases
+│   ├── architect_knowledge
+│   │   └── README.md
+│   ├── devops_knowledge
+│   │   ├── README.md
+│   │   └── deployment_strategy.md
+│   ├── engineer_knowledge
+│   │   └── README.md
+│   ├── feedback_knowledge
+│   │   └── README.md
+│   ├── oversight_knowledge
+│   │   └── README.md
+│   ├── qa_knowledge
+│   │   └── README.md
+│   └── reviewer_knowledge
+│       └── README.md
+├── archive
+│   ├── ai_debugging_debriefs.md
+│   ├── anticipated_complexities.md
+│   ├── bootstrap_scan.py
+│   ├── generate_debug_report.py
+│   ├── generate_project_dump.py
+│   ├── project_advanced_details.md
+│   ├── roadmap.md
+│   ├── start_chromadb.py
+│   ├── txt_compiler.py
+│   └── user_interaction_flow.md
+├── chroma_db
+│   ├── 1c1de883-3988-4970-8351-b868b9f371a8
+│   │   ├── data_level0.bin
+│   │   ├── header.bin
+│   │   ├── length.bin
+│   │   └── link_lists.bin
+│   ├── 1c4ec02b-8ef6-4cd4-8746-4460aa644ea0
+│   │   ├── data_level0.bin
+│   │   ├── header.bin
+│   │   ├── length.bin
+│   │   └── link_lists.bin
+│   ├── 1eb77469-5e13-4960-8bee-85d7a20625b1
+│   │   ├── data_level0.bin
+│   │   ├── header.bin
+│   │   ├── length.bin
+│   │   └── link_lists.bin
+│   ├── 3cd7184a-c98e-42fb-8988-9c6823f995d9
+│   │   ├── data_level0.bin
+│   │   ├── header.bin
+│   │   ├── length.bin
+│   │   └── link_lists.bin
+│   ├── 42e9a176-e45b-49fb-b07e-6da9ee63e415
+│   ├── 59f97eef-0dcb-4476-98fe-e2969ca72b36
+│   │   ├── data_level0.bin
+│   │   ├── header.bin
+│   │   ├── length.bin
+│   │   └── link_lists.bin
+│   ├── 7499ea70-83c7-49a8-8f3a-ef7f0b533f08
+│   │   ├── data_level0.bin
+│   │   ├── header.bin
+│   │   ├── index_metadata.pickle
+│   │   ├── length.bin
+│   │   └── link_lists.bin
+│   ├── 76163119-c92b-4d2b-8fdb-9234a4cc023e
+│   │   ├── data_level0.bin
+│   │   ├── header.bin
+│   │   ├── length.bin
+│   │   └── link_lists.bin
+│   ├── 78d5d3d1-366a-4f74-8c52-9d090e756556
+│   │   ├── data_level0.bin
+│   │   ├── header.bin
+│   │   ├── length.bin
+│   │   └── link_lists.bin
+│   ├── 8e0e1730-48ad-4e4f-a6ed-fabcf2de46b2
+│   │   ├── data_level0.bin
+│   │   ├── header.bin
+│   │   ├── length.bin
+│   │   └── link_lists.bin
+│   ├── 905202df-fa1a-47cf-b0f5-a98cec408a42
+│   │   ├── data_level0.bin
+│   │   ├── header.bin
+│   │   ├── length.bin
+│   │   └── link_lists.bin
+│   ├── F:
+│   │   └── projects
+│   ├── a96a209e-a28e-4c56-81eb-9ed166c96442
+│   │   ├── data_level0.bin
+│   │   ├── header.bin
+│   │   ├── length.bin
+│   │   └── link_lists.bin
+│   ├── aa1acf15-7043-4ed3-b438-e0fdfef0a69e
+│   │   ├── data_level0.bin
+│   │   ├── header.bin
+│   │   ├── length.bin
+│   │   └── link_lists.bin
+│   ├── bd84494a-85eb-4e6d-a629-755895984ece
+│   │   ├── data_level0.bin
+│   │   ├── header.bin
+│   │   ├── length.bin
+│   │   └── link_lists.bin
+│   ├── d74be4dc-48a9-4b4d-8cdb-7c14e34d3ce7
+│   │   ├── data_level0.bin
+│   │   ├── header.bin
+│   │   ├── length.bin
+│   │   └── link_lists.bin
+│   ├── dc4aa5d6-a214-4423-9e8a-f19a7a1a8d94
+│   │   ├── data_level0.bin
+│   │   ├── header.bin
+│   │   ├── length.bin
+│   │   └── link_lists.bin
+│   ├── e856d8ac-3251-4ee9-aa4b-861ce78686f4
+│   │   ├── data_level0.bin
+│   │   ├── header.bin
+│   │   ├── length.bin
+│   │   └── link_lists.bin
+│   ├── fb4dd675-7c43-42a2-98a8-3cbcaac37ece
+│   │   ├── data_level0.bin
+│   │   ├── header.bin
+│   │   ├── length.bin
+│   │   └── link_lists.bin
+│   └── chroma.sqlite3
+├── code_base
+│   ├── __pycache__
+│   │   └── agent_manager.cpython-310.pyc
+│   ├── agents
+│   │   ├── architect_agent.py
+│   │   ├── devops_agent.py
+│   │   ├── engineer_agent.py
+│   │   ├── feedback_agent.py
+│   │   ├── oversight_agent.py
+│   │   ├── qa_agent.py
+│   │   └── reviewer_agent.py
+│   ├── test_scripts
+│   │   ├── data_processor.py
+│   │   ├── math_utilities.py
+│   │   ├── test_api_handler.py
+│   │   ├── test_db_handler.py
+│   │   ├── test_math_operations.py
+│   │   └── user_auth.py
+│   ├── agent_manager.py
+│   ├── api_structure.py
+│   ├── core_architecture.py
+│   ├── debugging_strategy.py
+│   ├── generate_knowledge_base.py
+│   ├── generate_project_summary.py
+│   ├── generate_work_summary.py
+│   ├── map_project_structure.py
+│   ├── multi_agent_workflow.py
+│   ├── network_utils.py
+│   ├── store_markdown_in_chroma.py
+│   ├── user_interaction_flow.py
+│   └── work_session_logger.py
+├── config
+├── docs
+│   ├── pipeline_overview.md
+│   └── testing_plan.md
+├── experiments
+├── knowledge_base
+│   ├── ai_and_user_interaction_guidelines.md
+│   ├── ai_coding_guidelines.md
+│   ├── api_structure.md
+│   ├── best_practices.md
+│   ├── blueprint_execution_log_template.md
+│   ├── core_architecture.md
+│   ├── debugging_strategy_and_debriefing.md
+│   ├── future_proofing_and_complexities.md
+│   ├── long_term_vision_and_roadmap.md
+│   ├── project_overview.md
+│   ├── project_structure.md
+│   ├── technical_design_decisions_and_advanced_details.md
+│   └── testing_plan.md
+├── logs
+│   ├── LMStudio_DevLogs
+│   │   └── 2025-02-10 132302  [INFO].txt
+│   ├── daily_summary.json
+│   ├── daily_summary.md
+│   ├── debug_logs.json
+│   ├── debug_logs_old.json
+│   ├── debugging_strategy_log.json
+│   ├── project_full_dump.md
+│   ├── project_structure.json
+│   └── work_session.md
+├── notion_docs
+│   ├── 2-12 work summary 1982d727cb57802c9f31e6d694ac0e30.md
+│   ├── Hyper-Sprint to MVP 1972d727cb5780aaab15f645bedb208a.md
+│   └── Inventory_Report 1972d727cb57800db0eec6a5092d7caa.md
+├── scripts
+│   ├── __pycache__
+│   │   ├── blueprint_execution.cpython-310.pyc
+│   │   └── query_chroma.cpython-310.pyc
+│   ├── aggregator_search.py
+│   ├── blueprint_execution.py
+│   ├── capture_git_changes.py
+│   ├── check_doc_count.py
+│   ├── cleanup_collections.py
+│   ├── compiled_knowledge.py
+│   ├── debug_chroma.py
+│   ├── dependencies_compiler.py
+│   ├── generate_codebase_inventory.py
+│   ├── index_codebase.py
+│   ├── initialize_chroma.py
+│   ├── log_work_session.py
+│   ├── query_chroma.py
+│   ├── query_codebase_chunks.py
+│   ├── retrieve_codebase.py
+│   └── store_test_data.py
+├── tests
+│   ├── __pycache__
+│   │   ├── test_agent_manager.cpython-310-pytest-8.3.4.pyc
+│   │   ├── test_blueprint_execution.cpython-310-pytest-8.3.4.pyc
+│   │   └── test_query_chroma.cpython-310-pytest-8.3.4.pyc
+│   ├── test_agent_manager.py
+│   ├── test_blueprint_execution.py
+│   └── test_query_chroma.py
+├── codebase_inventory.md
+├── codebase_inventory.txt
+├── codebase_inventory_V2.md
+├── codebase_structure.txt
+├── compiled_knowledge.md
+├── compiled_knowledge.txt
+└── dependencies_report.md
+
+46 directories, 174 files

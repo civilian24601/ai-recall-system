@@ -1,0 +1,203 @@
+[
+    {
+      "id": "log_20250212_100000",
+      "timestamp": "2025-02-12 10:00:00",
+      "error": "ZeroDivisionError: division by zero",
+      "stack_trace": "File 'math_ops_mock.py', line 10, in calc_ratio",
+      "fix_attempted": "def calc_ratio(num, den):\n    if den == 0: return None\n    return num / den",
+      "fix_successful": true,
+      "execution_time": 2.15,
+      "resolved": true
+    },
+    {
+      "id": "log_20250212_100500",
+      "timestamp": "2025-02-12 10:05:00",
+      "error": "Database connection timeout",
+      "stack_trace": "File 'db_handler_mock.py', line 25, in connect_db",
+      "fix_attempted": "def fix_db_timeout():\n    print('Set connection_timeout=120')\n    return True",
+      "fix_successful": true,
+      "execution_time": 3.1,
+      "resolved": true
+    },
+    {
+      "id": "log_20250212_101000",
+      "timestamp": "2025-02-12 10:10:00",
+      "error": "KeyError: 'username'",
+      "stack_trace": "File 'auth_mock.py', line 14, in login_user",
+      "fix_attempted": "def login_user(data):\n    if 'username' not in data:\n        data['username'] = 'guest'\n    return data['username']",
+      "fix_successful": true,
+      "execution_time": 1.45,
+      "resolved": false
+    },
+    {
+      "id": "log_20250212_101500",
+      "timestamp": "2025-02-12 10:15:00",
+      "error": "KeyError: 'username'",
+      "stack_trace": "File 'auth_mock.py', line 22, in login_user",
+      "fix_attempted": "def login_user(data):\n    return data['username']", 
+      "fix_successful": false,
+      "execution_time": 1.2,
+      "resolved": false
+    },
+    {
+      "id": "log_20250212_102000",
+      "timestamp": "2025-02-12 10:20:00",
+      "error": "NameError: name 'model' is not defined",
+      "stack_trace": "File 'predict_api_mock.py', line 10, in run_prediction",
+      "fix_attempted": "model = load_my_model()\npreds = model.predict(X)",
+      "fix_successful": false,
+      "execution_time": 2.8,
+      "resolved": true
+    },
+    {
+      "id": "log_20250212_102500",
+      "timestamp": "2025-02-12 10:25:00",
+      "error": "NameError: name 'model' is not defined",
+      "stack_trace": "File 'predict_api_mock.py', line 22, in run_prediction",
+      "fix_attempted": "import joblib\nmodel = joblib.load('model.pkl')\n\n# re-run the prediction",
+      "fix_successful": true,
+      "execution_time": 2.6,
+      "resolved": true
+    },
+    {
+      "id": "log_20250212_103000",
+      "timestamp": "2025-02-12 10:30:00",
+      "error": "ZeroDivisionError: division by zero",
+      "stack_trace": "File 'math_ops_mock.py', line 25, in compute_average",
+      "fix_attempted": "def compute_average(vals):\n    if len(vals)==0: return 0\n    return sum(vals)/len(vals)",
+      "fix_successful": true,
+      "execution_time": 2.9,
+      "resolved": true
+    },
+    {
+      "id": "log_20250212_103500",
+      "timestamp": "2025-02-12 10:35:00",
+      "error": "Catastrophic meltdown: index out of range",
+      "stack_trace": "File 'aggregator_mock.py', line 58, in fetch_data",
+      "fix_attempted": "def safe_fetch(data, idx):\n    if idx >= len(data):\n        return None\n    return data[idx]",
+      "fix_successful": false,
+      "execution_time": 3.5,
+      "resolved": false
+    },
+    {
+      "id": "log_20250212_104000",
+      "timestamp": "2025-02-12 10:40:00",
+      "error": "Catastrophic meltdown: memory overflow",
+      "stack_trace": "File 'aggregator_mock.py', line 66, in fetch_data",
+      "fix_attempted": "def aggregator_fetch(data):\n    # Attempt streaming approach\n    pass",
+      "fix_successful": true,
+      "execution_time": 5.0,
+      "resolved": false
+    },
+    {
+      "id": "log_20250212_104500",
+      "timestamp": "2025-02-12 10:45:00",
+      "error": "TypeError: unsupported operand type(s) for +: 'str' and 'int'",
+      "stack_trace": "File 'data_processor_mock.py', line 14, in process_data",
+      "fix_attempted": "def process_data(item):\n    if isinstance(item, int):\n        return item + 10\n    return None",
+      "fix_successful": true,
+      "execution_time": 2.0,
+      "resolved": true
+    },
+    {
+      "id": "log_20250212_105000",
+      "timestamp": "2025-02-12 10:50:00",
+      "error": "Database connection timeout",
+      "stack_trace": "File 'db_handler_mock.py', line 42, in connect_db",
+      "fix_attempted": "def connect_db_with_retry():\n    # simulate retry logic\n    return True",
+      "fix_successful": true,
+      "execution_time": 3.2,
+      "resolved": true
+    },
+    {
+      "id": "log_20250212_105500",
+      "timestamp": "2025-02-12 10:55:00",
+      "error": "KeyError: 'session_id'",
+      "stack_trace": "File 'session_manager_mock.py', line 19, in retrieve_session",
+      "fix_attempted": "def retrieve_session(data):\n    return data.get('session_id', None)",
+      "fix_successful": true,
+      "execution_time": 1.2,
+      "resolved": false
+    },
+    {
+      "id": "log_20250212_110000",
+      "timestamp": "2025-02-12 11:00:00",
+      "error": "ValueError: invalid literal for int()",
+      "stack_trace": "File 'conversion_mock.py', line 8, in parse_int",
+      "fix_attempted": "def parse_int(val):\n    try:\n        return int(val)\n    except:\n        return 0",
+      "fix_successful": true,
+      "execution_time": 1.1,
+      "resolved": true
+    },
+    {
+      "id": "log_20250212_110500",
+      "timestamp": "2025-02-12 11:05:00",
+      "error": "ZeroDivisionError: division by zero",
+      "stack_trace": "File 'math_ops_mock.py', line 32, in compute_stats",
+      "fix_attempted": "def compute_stats(data):\n    # forgot to check for zero\n    pass",
+      "fix_successful": false,
+      "execution_time": 2.1,
+      "resolved": false
+    },
+    {
+      "id": "log_20250212_111000",
+      "timestamp": "2025-02-12 11:10:00",
+      "error": "Catastrophic meltdown: recursion depth exceeded",
+      "stack_trace": "File 'recursion_mock.py', line 99, in deep_call",
+      "fix_attempted": "def prevent_recursion_depth():\n    import sys\n    sys.setrecursionlimit(1000)",
+      "fix_successful": false,
+      "execution_time": 4.7,
+      "resolved": true
+    },
+    {
+      "id": "log_20250212_111500",
+      "timestamp": "2025-02-12 11:15:00",
+      "error": "Database connection timeout",
+      "stack_trace": "File 'db_handler_mock.py', line 50, in connect_db",
+      "fix_attempted": "def fix_db_timeout_v2():\n    print('Double check firewall')\n    return False",
+      "fix_successful": false,
+      "execution_time": 3.8,
+      "resolved": false
+    },
+    {
+      "id": "log_20250212_112000",
+      "timestamp": "2025-02-12 11:20:00",
+      "error": "KeyError: 'user_token'",
+      "stack_trace": "File 'auth_mock.py', line 40, in validate_user",
+      "fix_attempted": "def validate_user(data):\n    return data.get('user_token', 'missing_token')",
+      "fix_successful": true,
+      "execution_time": 1.4,
+      "resolved": true
+    },
+    {
+      "id": "log_20250212_112500",
+      "timestamp": "2025-02-12 11:25:00",
+      "error": "TypeError: can only concatenate str (not \"int\") to str",
+      "stack_trace": "File 'string_ops_mock.py', line 11, in combine_data",
+      "fix_attempted": "def combine_data(val1, val2):\n    return str(val1) + str(val2)",
+      "fix_successful": true,
+      "execution_time": 2.6,
+      "resolved": true
+    },
+    {
+      "id": "log_20250212_113000",
+      "timestamp": "2025-02-12 11:30:00",
+      "error": "ZeroDivisionError: division by zero",
+      "stack_trace": "File 'stats_calc_mock.py', line 18, in calc_mean",
+      "fix_attempted": "def calc_mean(values):\n    if not values:\n        return 0\n    return sum(values)/len(values)",
+      "fix_successful": true,
+      "execution_time": 2.0,
+      "resolved": true
+    },
+    {
+      "id": "log_20250212_113500",
+      "timestamp": "2025-02-12 11:35:00",
+      "error": "Catastrophic meltdown: negative array size",
+      "stack_trace": "File 'array_ops_mock.py', line 22, in create_array",
+      "fix_attempted": "def create_array(n):\n    if n < 0:\n        return None\n    return [0]*n",
+      "fix_successful": true,
+      "execution_time": 3.7,
+      "resolved": true
+    }
+  ]
+  
