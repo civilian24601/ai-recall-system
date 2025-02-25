@@ -1,0 +1,107 @@
+[
+    {
+        "error_type": "NameError: name 'model' is not defined",
+        "strategy": "from flask import Flask, request, jsonify\nimport joblib\n\napp = Flask(__name__)\nmodel = joblib.load('path/to/your_model.pkl')\n\n@app.route('/predict', methods=['POST'])\ndef predict():\n    data = request.get_json()\n    result = model.predict(data[\"input\"])\n    return jsonify({\"prediction\": result})\n\nif __name__ == \"__main__\":\n    app.run(debug=True)",
+        "attempts": 3,
+        "successful_fixes": 3,
+        "success_rate": 1.0
+    },
+    {
+        "error_type": "ZeroDivisionError: division by zero",
+        "strategy": "def divide_numbers(a, b):\n    \"\"\"Performs division but does not handle zero division.\"\"\"\n    if b != 0:\n        return a / b\n    else:\n        print(\"Error: Division by zero\")\n        return None",
+        "attempts": 3,
+        "successful_fixes": 3,
+        "success_rate": 1.0
+    },
+    {
+        "error_type": "Database connection timeout",
+        "strategy": "python\ndef fix_database_timeout():\n    try:\n        from sqlalchemy import create_engine\n        from sqlalchemy.exc import OperationalError\n        \n        engine = create_engine('your-db-uri')  # replace with your db uri\n        connection = engine.connect()\n        if connection is not None:\n            return True\n    except OperationalError as e:\n        print(f\"Database Connection Failed: {str(e)}\")\n        return False\n",
+        "attempts": 1,
+        "successful_fixes": 1,
+        "success_rate": 1.0
+    },
+    {
+        "error_type": "Database connection timeout",
+        "strategy": "def fix_database_timeout():\n    try:\n        from sqlalchemy import create_engine\n        from sqlalchemy.exc import OperationalError\n        \n        engine = create_engine('your-db-uri')  # replace with your db uri\n        connection = engine.connect()\n        if connection is not None:\n            return True\n    except OperationalError as e:\n        print(f\"Database Connection Failed: {str(e)}\")\n        return False\n",
+        "attempts": 1,
+        "successful_fixes": 1,
+        "success_rate": 1.0
+    },
+    {
+        "error_type": "Database connection timeout",
+        "strategy": "```python\ndef set_database_connection_timeout():\n    engine = create_engine('your-db-uri', connect_args={\"connect_timeout\": 120}) # Increased timeout\n```",
+        "attempts": 1,
+        "successful_fixes": 1,
+        "success_rate": 1.0
+    },
+    {
+        "error_type": "KeyError: 'username'",
+        "strategy": "```python\ndef authenticate_user(user_data):\n    \"\"\"Authenticates a user but throws KeyError if 'username' is missing.\"\"\"\n    return user_data.get(\"username\")  # \u2705 No more KeyError if 'username' is missing\n```",
+        "attempts": 1,
+        "successful_fixes": 1,
+        "success_rate": 1.0
+    },
+    {
+        "error_type": "ZeroDivisionError: division by zero",
+        "strategy": "```python\ndef calculate_ratio(numerator, denominator):\n    if denominator == 0:\n        return 'denominator is zero'\n    else:\n        return numerator / denominator\n```",
+        "attempts": 1,
+        "successful_fixes": 1,
+        "success_rate": 1.0
+    },
+    {
+        "error_type": "TypeError: unsupported operand type(s) for +: 'int' and 'NoneType'",
+        "strategy": "```python\ndef process_data(input_data):\n    \"\"\"Processes data and handles NoneType values.\"\"\"\n    if input_data[\"value\"] is not None:\n        return input_data[\"value\"] + 10\n    else:\n        return 10\n```",
+        "attempts": 1,
+        "successful_fixes": 1,
+        "success_rate": 1.0
+    },
+    {
+        "error_type": "Database connection timeout",
+        "strategy": "def fix_database_timeout():\ntry:\nfrom sqlalchemy import create_engine\nfrom sqlalchemy.exc import OperationalError\nengine = create_engine('your-db-uri')  # replace with your db uri\nconnection = engine.connect()\nif connection is not None:\nreturn True\nexcept OperationalError as e:\nprint(f\"Database Connection Failed: {str(e)}\")\nreturn False",
+        "attempts": 2,
+        "successful_fixes": 0,
+        "success_rate": 0.0
+    },
+    {
+        "error_type": "NameError: name 'model' is not defined",
+        "strategy": "from flask import Flask, request, jsonify\nimport joblib\napp = Flask(__name__)\nmodel = joblib.load('path/to/your_model.pkl')\n@app.route('/predict', methods=['POST'])\ndef predict():\ndata = request.get_json()\nresult = model.predict(data[\"input\"])\nreturn jsonify({\"prediction\": result})\nif __name__ == \"__main__\":\napp.run(debug=True)",
+        "attempts": 2,
+        "successful_fixes": 2,
+        "success_rate": 1.0
+    },
+    {
+        "error_type": "ZeroDivisionError: division by zero",
+        "strategy": "def divide_numbers(a, b):\n\"\"\"Performs division but does not handle zero division.\"\"\"\nif b != 0:\nreturn a / b\nelse:\nprint(\"Error: Division by zero\")\nreturn None",
+        "attempts": 2,
+        "successful_fixes": 2,
+        "success_rate": 1.0
+    },
+    {
+        "error_type": "Database connection timeout",
+        "strategy": "def set_database_connection_timeout():\nengine = create_engine('your-db-uri', connect_args={\"connect_timeout\": 120}) # Increased timeout",
+        "attempts": 2,
+        "successful_fixes": 2,
+        "success_rate": 1.0
+    },
+    {
+        "error_type": "KeyError: 'username'",
+        "strategy": "def authenticate_user(user_data):\n\"\"\"Authenticates a user but throws KeyError if 'username' is missing.\"\"\"\nreturn user_data.get(\"username\")  # \u2705 No more KeyError if 'username' is missing",
+        "attempts": 2,
+        "successful_fixes": 2,
+        "success_rate": 1.0
+    },
+    {
+        "error_type": "ZeroDivisionError: division by zero",
+        "strategy": "def calculate_ratio(numerator, denominator):\nif denominator == 0:\nreturn 'denominator is zero'\nelse:\nreturn numerator / denominator",
+        "attempts": 2,
+        "successful_fixes": 2,
+        "success_rate": 1.0
+    },
+    {
+        "error_type": "TypeError: unsupported operand type(s) for +: 'int' and 'NoneType'",
+        "strategy": "def process_data(input_data):\n\"\"\"Processes data and handles NoneType values.\"\"\"\nif input_data[\"value\"] is not None:\nreturn input_data[\"value\"] + 10\nelse:\nreturn 10",
+        "attempts": 2,
+        "successful_fixes": 2,
+        "success_rate": 1.0
+    }
+]

@@ -1,0 +1,173 @@
+{
+    "timestamp": "2025-02-10T12:26:58.170957",
+    "structure": {
+        ".": {
+            "dirs": [
+                "agent_knowledge_bases",
+                "chatgpt_dumps",
+                "code_base",
+                "config",
+                "experiments",
+                "knowledge_base",
+                "logs",
+                "scripts",
+                "__pycache__"
+            ],
+            "files": [
+                ".env"
+            ]
+        },
+        "agent_knowledge_bases": {
+            "dirs": [
+                "architect_knowledge",
+                "devops_knowledge",
+                "engineer_knowledge",
+                "feedback_knowledge",
+                "oversight_knowledge",
+                "qa_knowledge",
+                "reviewer_knowledge"
+            ],
+            "files": []
+        },
+        "agent_knowledge_bases/architect_knowledge": {
+            "dirs": [],
+            "files": [
+                "README.md"
+            ]
+        },
+        "agent_knowledge_bases/devops_knowledge": {
+            "dirs": [],
+            "files": [
+                "deployment_strategy.md",
+                "README.md"
+            ]
+        },
+        "agent_knowledge_bases/engineer_knowledge": {
+            "dirs": [],
+            "files": [
+                "README.md"
+            ]
+        },
+        "agent_knowledge_bases/feedback_knowledge": {
+            "dirs": [],
+            "files": [
+                "README.md"
+            ]
+        },
+        "agent_knowledge_bases/oversight_knowledge": {
+            "dirs": [],
+            "files": [
+                "README.md"
+            ]
+        },
+        "agent_knowledge_bases/qa_knowledge": {
+            "dirs": [],
+            "files": [
+                "README.md"
+            ]
+        },
+        "agent_knowledge_bases/reviewer_knowledge": {
+            "dirs": [],
+            "files": [
+                "README.md"
+            ]
+        },
+        "chatgpt_dumps": {
+            "dirs": [],
+            "files": [
+                "ChatGPT_Origin_Convo.docx",
+                "Feature_ Oversight AI Agent for Code Reviews & Dependency Management.docx",
+                "Framework_ Specialist Agents.docx",
+                "interactions.json"
+            ]
+        },
+        "code_base": {
+            "dirs": [
+                "agents",
+                "__pycache__"
+            ],
+            "files": [
+                "agent_manager.py",
+                "api_structure.py",
+                "bootstrap_scan.py",
+                "core_architecture.py",
+                "generate_api_structure.py",
+                "generate_core_architecture.py",
+                "generate_knowledge_base.py",
+                "generate_project_dump.py",
+                "generate_project_summary.py",
+                "generate_roadmap.py",
+                "generate_user_interaction.py",
+                "map_project_structure.py",
+                "multi_agent_workflow.py",
+                "update_roadmap.py",
+                "user_interaction_flow.py"
+            ]
+        },
+        "code_base/agents": {
+            "dirs": [],
+            "files": [
+                "architect_agent.py",
+                "devops_agent.py.py",
+                "engineer_agent.py",
+                "feedback_agent.py",
+                "oversight_agent.py",
+                "qa_agent.py",
+                "reviewer_agent.py"
+            ]
+        },
+        "code_base/__pycache__": {
+            "dirs": [],
+            "files": [
+                "agent_manager.cpython-310.pyc"
+            ]
+        },
+        "config": {
+            "dirs": [],
+            "files": []
+        },
+        "experiments": {
+            "dirs": [],
+            "files": []
+        },
+        "knowledge_base": {
+            "dirs": [],
+            "files": [
+                "ai_coding_guidelines.md",
+                "ai_debugging_debriefs.md",
+                "ai_interaction_guidelines.md",
+                "anticipated_complexities.md",
+                "api_structure.md",
+                "core_architecture.md",
+                "debugging_strategy.md",
+                "long_term_vision.md",
+                "progress_log.md",
+                "project_initial_answers.md",
+                "project_initial_questions.md",
+                "project_overview.md",
+                "project_structure.md",
+                "roadmap.md",
+                "technical_design_decisions.md",
+                "testing_plan.md",
+                "user_interaction_flow.md"
+            ]
+        },
+        "logs": {
+            "dirs": [],
+            "files": [
+                "project_full_dump.md",
+                "project_structure.json"
+            ]
+        },
+        "scripts": {
+            "dirs": [],
+            "files": []
+        },
+        "__pycache__": {
+            "dirs": [],
+            "files": [
+                "core_architecture.cpython-310.pyc"
+            ]
+        }
+    }
+}
