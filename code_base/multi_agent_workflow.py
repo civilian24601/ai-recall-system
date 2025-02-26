@@ -4,7 +4,12 @@ import json
 import datetime
 import re
 import os
-import chromadb  
+import logging
+import chromadb
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
 # Add the parent directory of code_base to the Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from agent_manager import AgentManager
@@ -38,17 +43,23 @@ class SingleAgentWorkflow:
 
     def retrieve_past_debug_logs(self):
         """Retrieve past debugging logs from local storage."""
-        print("🔍 Retrieving past debugging logs...")
+        logging.info("Retrieving past debugging logs...")
         try:
             with open(self.debug_log_file, "r") as f:
                 logs = json.load(f)
-                if not logs:
-                    print("⚠ No debugging logs found.")
+                valid_logs = []
+                for log in logs:
+                    if "id" in log and "error" in log and "stack_trace" in log:
+                        valid_logs.append(log)
+                    else:
+                        logging.warning(f"Skipping invalid log entry: {log}")
+                if not valid_logs:
+                    logging.warning("No valid debugging logs found.")
                     return []
-                print(f"✅ Retrieved {len(logs)} logs.")
-                return logs
+                logging.info(f"Retrieved {len(valid_logs)} valid logs.")
+                return valid_logs
         except (FileNotFoundError, json.JSONDecodeError) as e:
-            print(f"❌ Debugging log file missing or corrupted. Error: {e}")
+            logging.error(f"Debugging log file missing or corrupted. Error: {e}")
             return []
 
     def sync_debug_log_with_chroma(self, entry):
@@ -56,40 +67,52 @@ class SingleAgentWorkflow:
         Upserts the updated debug log entry into the 'debugging_logs' (or 'debugging_logs_test') collection.
         Each entry is stored as a separate document with ID = entry["id"].
         """
-        doc_json = json.dumps(entry)
-        metadata = {
-            "error": entry.get("error", ""),
-            "timestamp": entry.get("timestamp", ""),
-            "resolved": entry.get("resolved", False),
-            "fix_successful": entry.get("fix_successful", False),
-        }
-        self.debugging_logs_collection.add(
-            ids=[entry["id"]],
-            documents=[doc_json],
-            metadatas=[metadata]
-        )
-        print(f"🔄 Synced log entry '{entry['id']}' to Chroma collection '{self.debug_collection_name}'.")
+        try:
+            doc_json = json.dumps(entry)
+            metadata = {
+                "error": entry.get("error", ""),
+                "timestamp": entry.get("timestamp", ""),
+                "resolved": entry.get("resolved", False),
+                "fix_successful": entry.get("fix_successful", False),
+            }
+            existing_docs = self.debugging_logs_collection.get(ids=[entry["id"]])
+            if existing_docs and "documents" in existing_docs and existing_docs["documents"]:
+                self.debugging_logs_collection.update(
+                    ids=[entry["id"]],
+                    documents=[doc_json],
+                    metadatas=[metadata]
+                )
+                logging.info(f"Updated log entry '{entry['id']}' in Chroma collection '{self.debug_collection_name}'.")
+            else:
+                self.debugging_logs_collection.add(
+                    ids=[entry["id"]],
+                    documents=[doc_json],
+                    metadatas=[metadata]
+                )
+                logging.info(f"Added new log entry '{entry['id']}' to Chroma collection '{self.debug_collection_name}'.")
+        except Exception as e:
+            logging.error(f"Failed to sync debug log with Chroma: {e}")
 
     def run_workflow(self):
         """Executes a structured AI debugging & recall workflow for ALL pending issues."""
-        print("\n🚀 Starting Single-Agent AI Workflow...\n")
+        logging.info("Starting Single-Agent AI Workflow...")
 
         past_debug_logs = self.retrieve_past_debug_logs()
         if not past_debug_logs:
-            print("❌ No past debugging logs available.")
+            logging.error("No past debugging logs available.")
             return
 
-        print(f"🔍 Checking for unresolved debugging issues...")
+        logging.info("Checking for unresolved debugging issues...")
         unresolved_logs = [
             log for log in past_debug_logs
             if log.get("resolved") is False and "stack_trace" in log
         ]
 
         if not unresolved_logs:
-            print("✅ No unresolved debugging issues found.")
+            logging.info("No unresolved debugging issues found.")
             return
 
-        print(f"🔍 Found {len(unresolved_logs)} unresolved logs to process.")
+        logging.info(f"Found {len(unresolved_logs)} unresolved logs to process.")
 
         for error_entry in unresolved_logs:
             script_name = None
@@ -101,10 +124,10 @@ class SingleAgentWorkflow:
                 script_name = parts[1]
 
             if not script_name:
-                print(f"⚠ Skipping log entry with missing `stack_trace`: {error_entry}")
+                logging.warning(f"Skipping log entry with missing `stack_trace`: {error_entry}")
                 continue
 
-            print(f"🔹 AI will attempt to fix `{script_name}` based on debugging logs.")
+            logging.info(f"AI will attempt to fix `{script_name}` based on debugging logs.")
 
             script_path = os.path.join(self.test_scripts_dir, script_name)
             script_content = ""
@@ -113,10 +136,10 @@ class SingleAgentWorkflow:
                     script_content = f.read()
 
             if not script_content.strip():
-                print(f"⚠ `{script_name}` is empty or unavailable. Skipping AI fix.")
+                logging.warning(f"`{script_name}` is empty or unavailable. Skipping AI fix.")
                 continue
 
-            print("🔹 AI Analyzing Debugging Logs...")
+            logging.info("AI Analyzing Debugging Logs...")
             ai_fix_suggestion = self.agent_manager.delegate_task(
                 "debug",
                 (
@@ -132,7 +155,7 @@ class SingleAgentWorkflow:
 
             extracted_fix = self.agent_manager.preprocess_ai_response(ai_fix_suggestion)
 
-            print(f"✅ AI Suggested Fix:\n{extracted_fix}\n")
+            logging.info(f"AI Suggested Fix:\n{extracted_fix}\n")
             confirmation = input("Did the fix work? (y/n): ").strip().lower()
             fix_verified = confirmation == "y"
 
@@ -157,60 +180,17 @@ class SingleAgentWorkflow:
                 with open(self.debug_log_file, "w") as f:
                     json.dump(logs, f, indent=4)
 
-                print("✅ Debugging log successfully updated in `debug_logs.json`.")
+                logging.info("Debugging log successfully updated in `debug_logs.json`.")
 
                 # **UPSET to Chroma** (real-time sync)
                 self.sync_debug_log_with_chroma(error_entry)
 
             except Exception as e:
-                print(f"❌ Failed to update debugging log: {e}")
+                logging.error(f"Failed to update debugging log: {e}")
 
-        print("\n✅ Single-Agent AI Workflow Completed!\n")
-
+        logging.info("Single-Agent AI Workflow Completed!")
 
 # 🚀 Example Usage
 if __name__ == "__main__":
     workflow = SingleAgentWorkflow(test_mode=False)  # or True if you want test collection
     workflow.run_workflow()
-# ✅ Example Output
-# 
-# 🚀 Starting Single-Agent AI Workflow...
-# 
-# 🔍 Retrieving past debugging logs...
-# ✅ Retrieved 3 logs.
-# 🔍 Checking for unresolved debugging issues...
-# 🔍 Found 2 unresolved logs to process.
-# 🔹 AI will attempt to fix `test_db_handler.py` based on debugging logs.
-# 🔹 AI Analyzing Debugging Logs...
-# ✅ AI Suggested Fix:
-# def connect_to_database(db_name, user, password):
-#     # Your fix here...
-#     pass
-# 
-# Did the fix work? (y/n): y
-# ✅ Debugging log successfully updated in `debug_logs.json`.
-# 🔄 Synced log entry 'log_20210927_154200' to Chroma collection 'debugging_logs'.
-# 🔹 AI will attempt to fix `test_db_handler.py` based on debugging logs.
-# 🔹 AI Analyzing Debugging Logs...
-# ✅ AI Suggested Fix:
-# def connect_to_database(db_name, user, password):
-#     # Your fix here...
-#     pass
-# 
-# Did the fix work? (y/n): n
-# ✅ Debugging log successfully updated in `debug_logs.json`.
-# 🔄 Synced log entry 'log_20210927_154201' to Chroma collection 'debugging_logs'.
-# 
-# ✅ Single-Agent AI Workflow Completed!
-# 
-# In this example, the script reads past debugging logs from a local JSON file and processes unresolved issues. For each issue, it retrieves the script content, sends a task to the AI agent, and prompts the user to verify the fix. The script then updates the local JSON file and syncs the updated log entry to the Chroma collection.
-# 
-# This workflow demonstrates the integration of AI agents, local file storage, and a cloud-based database to manage debugging logs and AI-driven fixes.
-# 
-# You can customize the workflow by adding more error handling, logging, or AI tasks to enhance the debugging and recall capabilities of the system.
-# 
-# This script can be extended to handle more complex workflows, multiple agents, or additional data sources to create a comprehensive AI-driven debugging and recall system.
-# 
-# For more advanced features, consider integrating with other tools, APIs, or services to enhance the AI capabilities and improve the efficiency of the debugging and recall processes.
-# 
-# By combining AI agents, local storage, and cloud databases, you can build a robust system for managing debugging logs, analyzing issues, and generating AI-driven fixes to streamline the software development and debugging process.

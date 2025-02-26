@@ -1,8 +1,13 @@
 import json
 import datetime
 import hashlib
+import os
+import logging
 
 import chromadb  # <-- NEW
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class DebuggingStrategy:
     """Manages AI debugging strategies and tracks effectiveness."""
@@ -21,13 +26,17 @@ class DebuggingStrategy:
         try:
             with open(self.strategy_log_file, "r") as f:
                 return json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            logging.error(f"Failed to load strategy logs: {e}")
             return []  # Return empty if file missing or corrupted
 
     def save_strategy_logs(self, strategies):
         """Saves updated debugging strategies to local JSON."""
-        with open(self.strategy_log_file, "w") as f:
-            json.dump(strategies, f, indent=4)
+        try:
+            with open(self.strategy_log_file, "w") as f:
+                json.dump(strategies, f, indent=4)
+        except Exception as e:
+            logging.error(f"Failed to save strategy logs: {e}")
 
     def normalize_snippet(self, snippet):
         """
@@ -55,76 +64,96 @@ class DebuggingStrategy:
         Upserts the snippet strategy record into the 'debugging_strategies' or
         'debugging_strategies_test' collection.
         """
-        doc_id = self.build_strategy_doc_id(error_type, snippet)
-        doc_json = json.dumps(strategy_record)
+        try:
+            doc_id = self.build_strategy_doc_id(error_type, snippet)
+            doc_json = json.dumps(strategy_record)
 
-        # Minimal metadata for searching
-        metadata = {
-            "error_type": error_type,
-            "snippet_hash": doc_id,
-            "attempts": strategy_record.get("attempts", 0),
-            "success_rate": strategy_record.get("success_rate", 0.0),
-        }
+            # Minimal metadata for searching
+            metadata = {
+                "error_type": error_type,
+                "snippet_hash": doc_id,
+                "attempts": strategy_record.get("attempts", 0),
+                "success_rate": strategy_record.get("success_rate", 0.0),
+            }
 
-        self.strategies_collection.add(
-            ids=[doc_id],
-            documents=[doc_json],
-            metadatas=[metadata]
-        )
-        print(f"🔄 Synced strategy doc ID='{doc_id}' to Chroma collection '{self.strategies_collection_name}'.")
+            # Check if the document already exists
+            existing_docs = self.strategies_collection.get(ids=[doc_id])
+            if existing_docs and "documents" in existing_docs and existing_docs["documents"]:
+                logging.info(f"Strategy doc ID '{doc_id}' already exists in Chroma collection '{self.strategies_collection_name}'. Updating existing entry.")
+                self.strategies_collection.update(
+                    ids=[doc_id],
+                    documents=[doc_json],
+                    metadatas=[metadata]
+                )
+            else:
+                self.strategies_collection.add(
+                    ids=[doc_id],
+                    documents=[doc_json],
+                    metadatas=[metadata]
+                )
+            logging.info(f"Synced strategy doc ID '{doc_id}' to Chroma collection '{self.strategies_collection_name}'.")
+        except Exception as e:
+            logging.error(f"Failed to sync strategy with Chroma: {e}")
 
     def get_debugging_strategy(self, error_type):
         """
         Returns the snippet with highest success_rate for error_type,
         or a default fallback if none found in local JSON. (No Chroma query yet.)
         """
-        strategies = self.load_strategy_logs()
-        matching_strategies = [s for s in strategies if s["error_type"] == error_type]
+        try:
+            strategies = self.load_strategy_logs()
+            matching_strategies = [s for s in strategies if s["error_type"] == error_type]
 
-        if matching_strategies:
-            best_strategy = sorted(
-                matching_strategies,
-                key=lambda x: x["success_rate"],
-                reverse=True
-            )[0]
-            return best_strategy["strategy"]
+            if matching_strategies:
+                best_strategy = sorted(
+                    matching_strategies,
+                    key=lambda x: x["success_rate"],
+                    reverse=True
+                )[0]
+                return best_strategy["strategy"]
 
-        # Default fallback
-        return "Standard debugging: AI will analyze logs, suggest fixes, and request verification."
+            # Default fallback
+            return "Standard debugging: AI will analyze logs, suggest fixes, and request verification."
+        except Exception as e:
+            logging.error(f"Failed to get debugging strategy: {e}")
+            return "Standard debugging: AI will analyze logs, suggest fixes, and request verification."
 
     def update_strategy(self, error_type, snippet, success):
         """
         Updates or creates a debugging strategy record based on
         the new fix attempt's success. Also upserts into Chroma.
         """
-        strategies = self.load_strategy_logs()
+        try:
+            strategies = self.load_strategy_logs()
 
-        for entry in strategies:
-            # Match both error_type and the exact snippet
-            if entry["error_type"] == error_type and entry["strategy"] == snippet:
-                entry["attempts"] += 1
-                if success:
-                    entry["successful_fixes"] += 1
-                entry["success_rate"] = entry["successful_fixes"] / entry["attempts"]
+            for entry in strategies:
+                # Match both error_type and the exact snippet
+                if entry["error_type"] == error_type and entry["strategy"] == snippet:
+                    entry["attempts"] += 1
+                    if success:
+                        entry["successful_fixes"] += 1
+                    entry["success_rate"] = entry["successful_fixes"] / entry["attempts"]
 
-                self.save_strategy_logs(strategies)
-                # Upsert to Chroma
-                self.sync_strategy_with_chroma(error_type, snippet, entry)
-                return
+                    self.save_strategy_logs(strategies)
+                    # Upsert to Chroma
+                    self.sync_strategy_with_chroma(error_type, snippet, entry)
+                    return
 
-        # If no matching entry, create a new one
-        new_record = {
-            "error_type": error_type,
-            "strategy": snippet,
-            "attempts": 1,
-            "successful_fixes": 1 if success else 0,
-            "success_rate": 1.0 if success else 0.0
-        }
-        strategies.append(new_record)
-        self.save_strategy_logs(strategies)
+            # If no matching entry, create a new one
+            new_record = {
+                "error_type": error_type,
+                "strategy": snippet,
+                "attempts": 1,
+                "successful_fixes": 1 if success else 0,
+                "success_rate": 1.0 if success else 0.0
+            }
+            strategies.append(new_record)
+            self.save_strategy_logs(strategies)
 
-        # Upsert to Chroma
-        self.sync_strategy_with_chroma(error_type, snippet, new_record)
+            # Upsert to Chroma
+            self.sync_strategy_with_chroma(error_type, snippet, new_record)
+        except Exception as e:
+            logging.error(f"Failed to update strategy: {e}")
 
     def analyze_previous_fixes(self):
         """
@@ -134,12 +163,13 @@ class DebuggingStrategy:
         try:
             with open(self.debug_logs_file, "r") as f:
                 debug_logs = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            logging.error(f"Failed to load debug logs: {e}")
             return
 
         for entry in debug_logs:
             if "error" in entry and "fix_attempted" in entry:
-                print(f"🔍 Processing error log: {entry['error']}")
+                logging.info(f"Processing error log: {entry['error']}")
                 success_flag = (entry.get("fix_successful") is True)
                 norm_snippet = self.normalize_snippet(entry["fix_attempted"])
                 self.update_strategy(entry["error"], norm_snippet, success=success_flag)
@@ -153,31 +183,3 @@ if __name__ == "__main__":
     # Example: get a strategy
     strategy = debugger.get_debugging_strategy("ZeroDivisionError: division by zero")
     print(f"Recommended Debugging Strategy: {strategy}")
-# ✅ Example Output
-# 
-# 🔍 Processing error log: ZeroDivisionError: division by zero
-# 🔄 Synced strategy doc ID='c0f2d1f7e7c2d4a0' to Chroma collection 'debugging_strategies'.
-# Recommended Debugging Strategy: Standard debugging: AI will analyze logs, suggest fixes, and request verification.
-# 
-# 🔍 Processing error log: NameError: name 'conn' is not defined
-# 🔄 Synced strategy doc ID='b4f4b7d8c3e1e2d8' to Chroma collection 'debugging_strategies'.
-# Recommended Debugging Strategy: Standard debugging: AI will analyze logs, suggest fixes, and request verification.
-# 
-# 🔍 Processing error log: AttributeError: 'NoneType' object has no attribute 'execute'
-# 🔄 Synced strategy doc ID='a3b2a1d4f8b7c2e1' to Chroma collection 'debugging_strategies'.
-# Recommended Debugging Strategy: Standard debugging: AI will analyze logs, suggest fixes, and request verification.
-# 
-# 🔍 Processing error log: ZeroDivisionError: division by zero
-# 🔄 Synced strategy doc ID='c0f2d1f7e7c2d4a0' to Chroma collection 'debugging_strategies'.
-# Recommended Debugging Strategy: Standard debugging: AI will analyze logs, suggest fixes, and request verification.
-# 
-# 🔍 Processing error log: NameError: name 'conn' is not defined
-# 🔄 Synced strategy doc ID='b4f4b7d8c3e1e2d8' to Chroma collection 'debugging_strategies'.
-# Recommended Debugging Strategy: Standard debugging: AI will analyze logs, suggest fixes, and request verification.
-# 
-# 🔍 Processing error log: AttributeError: 'NoneType' object has no attribute 'execute'
-# 🔄 Synced strategy doc ID='a3b2a1d4f8b7c2e1' to Chroma collection 'debugging_strategies'.
-# Recommended Debugging Strategy: Standard debugging: AI will analyze logs, suggest fixes, and request verification.
-# 
-# 🔍 Processing error log: ZeroDivisionError: division by zero
-# 🔄 Synced strategy doc ID='c0f2d1f
