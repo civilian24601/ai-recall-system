@@ -8,6 +8,7 @@ blueprint_versions = chroma_client.get_or_create_collection(name="blueprint_vers
 revision_proposals = chroma_client.get_or_create_collection(name="blueprint_revisions")
 work_sessions = chroma_client.get_or_create_collection(name="work_sessions")
 debugging_logs = chroma_client.get_or_create_collection(name="debugging_logs")
+debugging_strategies = chroma_client.get_or_create_collection(name="debugging_strategies")
 
 def list_execution_logs(limit=100):
     """Retrieve and print a summary of stored execution logs."""

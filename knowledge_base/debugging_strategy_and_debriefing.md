@@ -24,9 +24,7 @@ Log to debug_logs.json: Key details are appended (timestamp, error, fix attempte
 Store in ChromaDB: The log is added to the debugging_logs collection, enabling quick retrieval later.
 Example (debug_logs.json):
 
-json
-Copy
-Edit
+
 {
   "timestamp": "2025-02-10 14:23:11",
   "error": "SQL Integrity Constraint Violation",
@@ -35,19 +33,15 @@ Edit
 }
 By capturing timestamp, error, and fix_applied, the AI can reuse these solutions for similar errors.
 
-4. Debugging Retrieval & Testing
+1. Debugging Retrieval & Testing
 4.1 AI-Assisted Retrieval
 Developers or the AI itself can query past logs in ChromaDB:
 
-bash
-Copy
-Edit
+
 ai-debug "What was the last database error?"
 Sample AI Response:
 
-pgsql
-Copy
-Edit
+
 [DEBUG LOG: 2025-02-10]
 Error: SQL Integrity Constraint Violation
 Fix Applied: Added unique constraint in schema.
@@ -60,7 +54,7 @@ Detects an error (e.g., in api_structure.py)
 Queries ChromaDB for potential solutions
 Applies the best solution automatically
 Verifies success or attempts another approach
-5. Standard AI Debugging Debrief Format
+1. Standard AI Debugging Debrief Format
 After a fix is applied, the AI can generate a Debugging Debrief to document the steps taken:
 
 Task Name: Brief description of the debugging task
@@ -70,9 +64,7 @@ Error Logs: Relevant stack traces or error messages
 AI Debugging Summary: Steps taken, solutions attempted, failures encountered
 Example:
 
-plaintext
-Copy
-Edit
+
 Task Name: Fix DB Integrity Error
 Files Modified: db_handler.py
 Functions Edited: execute_query
@@ -82,7 +74,7 @@ AI Debugging Summary:
     - Applied unique constraint in schema, retested. Confirmed success.
 This ensures consistent record-keeping for future reference and learning.
 
-6. AI Debugging Workflow & Retrieval
+1. AI Debugging Workflow & Retrieval
 6.1 Workflow Recap
 Stage	Process
 1: Error Detection	AI detects failure & logs it into debug_logs.json.
@@ -93,9 +85,7 @@ Stage	Process
 The final goal is for the AI to retrieve and apply successful solutions before attempting new strategies.
 
 6.2 Example Log Entry with Extended Fields
-json
-Copy
-Edit
+
 {
   "timestamp": "2025-02-10 14:23:11",
   "error": "SQL Integrity Constraint Violation",
@@ -106,7 +96,7 @@ Edit
 }
 Captures error details, fix, success rate, and an AI confidence score.
 
-7. AI Debugging Evaluation & Learning
+1. AI Debugging Evaluation & Learning
 Once a fix is applied:
 
 AI logs success or failure.
