@@ -12,18 +12,26 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 # Add the parent directory of code_base to the Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from agent_manager import AgentManager
+
+from .agent_manager import AgentManager
+from .debugging_strategy import DebuggingStrategy  # [NEW] We import it here so we can link them
 
 class SingleAgentWorkflow:
     """Executes AI recall, debugging, and code retrieval workflows in single-agent mode."""
 
     def __init__(self, test_mode=False):
         """
-        If test_mode=True, we might switch to 'debugging_logs_test' for Chroma.
-        Otherwise, we use 'debugging_logs' for production.
+        If test_mode=True, we switch to test logs and 'debugging_logs_test' for Chroma.
+        Otherwise, we use 'debug_logs.json' & 'debugging_logs' for production.
         """
         self.agent_manager = AgentManager()
-        self.debug_log_file = "../logs/debug_logs.json"
+        
+        # [NEW] Switch local JSON path based on test_mode
+        if test_mode:
+            self.debug_log_file = "tests/test_logs/debug_logs_test.json"
+        else:
+            self.debug_log_file = "../logs/debug_logs.json"
+
         self.test_scripts_dir = "./test_scripts/"
         self.ai_timeout = 300
 
@@ -31,10 +39,15 @@ class SingleAgentWorkflow:
         self.chroma_client = chromadb.PersistentClient(
             path="/mnt/f/projects/ai-recall-system/chroma_db/"
         )
+        
+        # [NEW] Pick test vs. production collection name
         self.debug_collection_name = "debugging_logs_test" if test_mode else "debugging_logs"
         self.debugging_logs_collection = self.chroma_client.get_or_create_collection(
             name=self.debug_collection_name
         )
+
+        # [NEW] Also create a DebuggingStrategy instance, using the same test_mode
+        self.debugging_strategy = DebuggingStrategy(test_mode=test_mode)
 
     def generate_log_id(self, prefix="log"):
         """Generates a unique ID for debugging log entries."""
@@ -76,7 +89,9 @@ class SingleAgentWorkflow:
                 "fix_successful": entry.get("fix_successful", False),
             }
             existing_docs = self.debugging_logs_collection.get(ids=[entry["id"]])
-            if existing_docs and "documents" in existing_docs and existing_docs["documents"]:
+            if (existing_docs 
+                and "documents" in existing_docs 
+                and existing_docs["documents"]):
                 self.debugging_logs_collection.update(
                     ids=[entry["id"]],
                     documents=[doc_json],
@@ -157,7 +172,7 @@ class SingleAgentWorkflow:
 
             logging.info(f"AI Suggested Fix:\n{extracted_fix}\n")
             confirmation = input("Did the fix work? (y/n): ").strip().lower()
-            fix_verified = confirmation == "y"
+            fix_verified = (confirmation == "y")
 
             # Update the local JSON record
             error_entry["fix_attempted"] = extracted_fix
@@ -188,9 +203,20 @@ class SingleAgentWorkflow:
             except Exception as e:
                 logging.error(f"Failed to update debugging log: {e}")
 
+            # [NEW] Also update the DebuggingStrategy with success/fail 
+            # if we have a recognized 'error' and an AI snippet
+            if "error" in error_entry and extracted_fix:
+                logging.info("Updating the debugging strategy with fix success/failure...")
+                self.debugging_strategy.update_strategy(
+                    error_type=error_entry["error"],
+                    snippet=extracted_fix,
+                    success=fix_verified
+                )
+
         logging.info("Single-Agent AI Workflow Completed!")
 
 # 🚀 Example Usage
 if __name__ == "__main__":
-    workflow = SingleAgentWorkflow(test_mode=False)  # or True if you want test collection
+    # For production: test_mode=False
+    workflow = SingleAgentWorkflow(test_mode=False)
     workflow.run_workflow()

@@ -72,8 +72,8 @@
     {
         "error_type": "ZeroDivisionError: division by zero",
         "strategy": "def divide_numbers(a, b):\n\"\"\"Performs division but does not handle zero division.\"\"\"\nif b != 0:\nreturn a / b\nelse:\nprint(\"Error: Division by zero\")\nreturn None",
-        "attempts": 2,
-        "successful_fixes": 2,
+        "attempts": 8,
+        "successful_fixes": 8,
         "success_rate": 1.0
     },
     {
@@ -100,6 +100,83 @@
     {
         "error_type": "TypeError: unsupported operand type(s) for +: 'int' and 'NoneType'",
         "strategy": "def process_data(input_data):\n\"\"\"Processes data and handles NoneType values.\"\"\"\nif input_data[\"value\"] is not None:\nreturn input_data[\"value\"] + 10\nelse:\nreturn 10",
+        "attempts": 2,
+        "successful_fixes": 2,
+        "success_rate": 1.0
+    },
+    {
+        "error_type": "Database connection timeout",
+        "strategy": "def create_engine_with_timeout(db_uri):\nreturn create_engine(db_uri, connect_args={\"connect_timeout\": 10})",
+        "attempts": 5,
+        "successful_fixes": 5,
+        "success_rate": 1.0
+    },
+    {
+        "error_type": "NameError: name 'model' is not defined",
+        "strategy": "from flask import Flask, request, jsonify\nmodel = None  # define model here\napp = Flask(__name__)\n@app.route('/predict', methods=['POST'])\ndef predict():\ndata = request.get_json()\nresult = model.predict(data[\"input\"])\nreturn jsonify({\"prediction\": result})\nif __name__ == \"__main__\":\napp.run(debug=True)",
+        "attempts": 3,
+        "successful_fixes": 0,
+        "success_rate": 0.0
+    },
+    {
+        "error_type": "Database connection timeout",
+        "strategy": "def setup_database_connection():\nfrom sqlalchemy import create_engine\nreturn create_engine('your-db-uri', connect_args={\"connect_timeout\": 30})",
+        "attempts": 6,
+        "successful_fixes": 6,
+        "success_rate": 1.0
+    },
+    {
+        "error_type": "KeyError: 'username'",
+        "strategy": "def authenticate_user(user_data):\n\"\"\"Authenticates a user but throws KeyError if 'username' is missing.\"\"\"\ntry:\nreturn user_data[\"username\"]\nexcept KeyError:\nraise ValueError(\"Missing username\")",
+        "attempts": 5,
+        "successful_fixes": 5,
+        "success_rate": 1.0
+    },
+    {
+        "error_type": "ZeroDivisionError: division by zero",
+        "strategy": "def calculate_ratio(numerator, denominator):\n\"\"\"Calculates ratio but does not handle ZeroDivisionError.\"\"\"\nif denominator != 0:\nreturn numerator / denominator\nelse:\nreturn None",
+        "attempts": 5,
+        "successful_fixes": 5,
+        "success_rate": 1.0
+    },
+    {
+        "error_type": "TypeError: unsupported operand type(s) for +: 'int' and 'NoneType'",
+        "strategy": "def process_data(input_data):\n\"\"\"Processes data but does not handle NoneType values.\"\"\"\nreturn input_data[\"value\"] + 10 if input_data and \"value\" in input_data and input_data[\"value\"] is not None else None",
+        "attempts": 6,
+        "successful_fixes": 6,
+        "success_rate": 1.0
+    },
+    {
+        "error_type": "NameError: name 'model' is not defined",
+        "strategy": "from flask import Flask, request, jsonify\napp = Flask(__name__)\nclass Model:\ndef predict(self, input):\nreturn \"dummy prediction\"  # replace this with actual model prediction function\nmodel = Model()\n@app.route('/predict', methods=['POST'])\ndef predict():\n\"\"\"Handles a machine learning model prediction request.\"\"\"\ndata = request.get_json()\nresult = model.predict(data[\"input\"])\nreturn jsonify({\"prediction\": result})\nif __name__ == \"__main__\":\napp.run(debug=True)",
+        "attempts": 2,
+        "successful_fixes": 2,
+        "success_rate": 1.0
+    },
+    {
+        "error_type": "Database connection timeout",
+        "strategy": "def create_database_connection(db_uri):\nfrom sqlalchemy import create_engine\nreturn create_engine(db_uri, connect_args={\"connect_timeout\": 5})",
+        "attempts": 2,
+        "successful_fixes": 2,
+        "success_rate": 1.0
+    },
+    {
+        "error_type": "NameError: name 'model' is not defined",
+        "strategy": "def predict():\n\"\"\"Handles a machine learning model prediction request.\"\"\"\ndata = request.get_json()\nresult = \"not implemented\"  # Replace with actual model call when defined\nreturn jsonify({\"prediction\": result})",
+        "attempts": 2,
+        "successful_fixes": 2,
+        "success_rate": 1.0
+    },
+    {
+        "error_type": "KeyError: 'username'",
+        "strategy": "def authenticate_user(user_data):\n\"\"\"Authenticates a user but throws KeyError if 'username' is missing.\"\"\"\ntry:\nreturn user_data[\"username\"]\nexcept KeyError:\nprint(\"The key 'username' does not exist in the dictionary.\")",
+        "attempts": 2,
+        "successful_fixes": 2,
+        "success_rate": 1.0
+    },
+    {
+        "error_type": "ZeroDivisionError: division by zero",
+        "strategy": "def calculate_ratio(numerator, denominator):\n\"\"\"Calculates ratio and handles ZeroDivisionError.\"\"\"\nif denominator == 0:  # Handle zero division error\nreturn None\nelse:\nreturn numerator / denominator\n# Simulated test case\nresult = calculate_ratio(10, 0)  # Returns None",
         "attempts": 2,
         "successful_fixes": 2,
         "success_rate": 1.0

@@ -6,7 +6,7 @@ CODEBASE_DIRS = [os.path.join(BASE_DIR, "code_base"), os.path.join(BASE_DIR, "sc
 OUTPUT_FILE = os.path.join(BASE_DIR, "codebase_inventory.md")
 TREE_OUTPUT = os.path.join(BASE_DIR, "codebase_structure.txt")
 
-def generate_directory_tree(output_file, depth=3):
+def generate_directory_tree(output_file, depth=5):
     """Generate a tree structure of the codebase."""
     os.system(f"tree -L {depth} --dirsfirst --filelimit 50 {BASE_DIR} > {output_file}")
 

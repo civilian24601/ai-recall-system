@@ -4,7 +4,7 @@ import hashlib
 import os
 import logging
 
-import chromadb  # <-- NEW
+import chromadb  # For storing snippet strategies in Chroma
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -13,13 +13,24 @@ class DebuggingStrategy:
     """Manages AI debugging strategies and tracks effectiveness."""
 
     def __init__(self, test_mode=False):
-        self.strategy_log_file = "../logs/debugging_strategy_log.json"
-        self.debug_logs_file = "../logs/debug_logs.json"
+        # [UPDATED] Switch file paths if test_mode
+        if test_mode:
+            self.debug_logs_file = "tests/test_logs/debug_logs_test.json"
+            self.strategy_log_file = "tests/test_logs/debugging_strategy_log_test.json"
+        else:
+            self.debug_logs_file = "../logs/debug_logs.json"
+            self.strategy_log_file = "../logs/debugging_strategy_log.json"
 
         # Connect to Chroma for snippet success rates
         self.chroma_client = chromadb.PersistentClient(path="/mnt/f/projects/ai-recall-system/chroma_db/")
-        self.strategies_collection_name = "debugging_strategies_test" if test_mode else "debugging_strategies"
-        self.strategies_collection = self.chroma_client.get_or_create_collection(name=self.strategies_collection_name)
+        
+        # [SAME AS BEFORE] 
+        self.strategies_collection_name = (
+            "debugging_strategies_test" if test_mode else "debugging_strategies"
+        )
+        self.strategies_collection = self.chroma_client.get_or_create_collection(
+            name=self.strategies_collection_name
+        )
 
     def load_strategy_logs(self):
         """Loads past debugging strategies from local JSON."""
@@ -76,10 +87,9 @@ class DebuggingStrategy:
                 "success_rate": strategy_record.get("success_rate", 0.0),
             }
 
-            # Check if the document already exists
             existing_docs = self.strategies_collection.get(ids=[doc_id])
             if existing_docs and "documents" in existing_docs and existing_docs["documents"]:
-                logging.info(f"Strategy doc ID '{doc_id}' already exists in Chroma collection '{self.strategies_collection_name}'. Updating existing entry.")
+                logging.info(f"Strategy doc ID '{doc_id}' already exists. Updating existing entry.")
                 self.strategies_collection.update(
                     ids=[doc_id],
                     documents=[doc_json],
@@ -98,7 +108,8 @@ class DebuggingStrategy:
     def get_debugging_strategy(self, error_type):
         """
         Returns the snippet with highest success_rate for error_type,
-        or a default fallback if none found in local JSON. (No Chroma query yet.)
+        or a default fallback if none found in local JSON. 
+        (No direct Chroma query for single best snippet yet.)
         """
         try:
             strategies = self.load_strategy_logs()
@@ -126,23 +137,25 @@ class DebuggingStrategy:
         try:
             strategies = self.load_strategy_logs()
 
+            # Normalize snippet to reduce duplicates
+            norm_snippet = self.normalize_snippet(snippet)
+
             for entry in strategies:
-                # Match both error_type and the exact snippet
-                if entry["error_type"] == error_type and entry["strategy"] == snippet:
+                # Match both error_type and the EXACT snippet
+                if entry["error_type"] == error_type and entry["strategy"] == norm_snippet:
                     entry["attempts"] += 1
                     if success:
                         entry["successful_fixes"] += 1
                     entry["success_rate"] = entry["successful_fixes"] / entry["attempts"]
 
                     self.save_strategy_logs(strategies)
-                    # Upsert to Chroma
-                    self.sync_strategy_with_chroma(error_type, snippet, entry)
+                    self.sync_strategy_with_chroma(error_type, norm_snippet, entry)
                     return
 
             # If no matching entry, create a new one
             new_record = {
                 "error_type": error_type,
-                "strategy": snippet,
+                "strategy": norm_snippet,
                 "attempts": 1,
                 "successful_fixes": 1 if success else 0,
                 "success_rate": 1.0 if success else 0.0
@@ -151,7 +164,7 @@ class DebuggingStrategy:
             self.save_strategy_logs(strategies)
 
             # Upsert to Chroma
-            self.sync_strategy_with_chroma(error_type, snippet, new_record)
+            self.sync_strategy_with_chroma(error_type, norm_snippet, new_record)
         except Exception as e:
             logging.error(f"Failed to update strategy: {e}")
 
@@ -176,10 +189,8 @@ class DebuggingStrategy:
 
 # 🚀 Example Usage
 if __name__ == "__main__":
-    # For production, test_mode=False
     debugger = DebuggingStrategy(test_mode=False)
     debugger.analyze_previous_fixes()
-
-    # Example: get a strategy
-    strategy = debugger.get_debugging_strategy("ZeroDivisionError: division by zero")
-    print(f"Recommended Debugging Strategy: {strategy}")
+    # Optionally retrieve best known snippet for some error
+    best_snippet = debugger.get_debugging_strategy("ZeroDivisionError: division by zero")
+    print(f"Best known snippet for ZeroDivisionError: {best_snippet}")

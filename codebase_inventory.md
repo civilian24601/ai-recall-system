@@ -1,4 +1,9 @@
 
+# 📂 code_base/__init__.py
+
+
+---
+
 # 📂 code_base/agent_manager.py
 
 # /mnt/f/projects/ai-recall-system/code_base/agent_manager.py
@@ -6,7 +11,7 @@
 import requests
 import re
 import os
-from network_utils import detect_api_url  # <-- NEW IMPORT
+from code_base.network_utils import detect_api_url  # <-- NEW IMPORT
 
 class AgentManager:
     """Manages AI Agents for architecture, coding, review, and automation."""
@@ -137,9 +142,11 @@ if __name__ == "__main__":
 import requests
 from flask import Flask, request
 from flask_restful import Resource, Api
+from flask_cors import CORS
 from network_utils import detect_api_url  # <-- Now we can import the same logic if we want
 
 app = Flask(__name__)
+CORS(app)
 api = Api(app)
 
 class APIHandler(Resource):
@@ -335,91 +342,189 @@ if __name__ == "__main__":
 
 import json
 import datetime
+import hashlib
+import os
+import logging
+
+import chromadb  # <-- NEW
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class DebuggingStrategy:
     """Manages AI debugging strategies and tracks effectiveness."""
 
-    def __init__(self):
+    def __init__(self, test_mode=False):
         self.strategy_log_file = "../logs/debugging_strategy_log.json"
         self.debug_logs_file = "../logs/debug_logs.json"
 
+        # Connect to Chroma for snippet success rates
+        self.chroma_client = chromadb.PersistentClient(path="/mnt/f/projects/ai-recall-system/chroma_db/")
+        self.strategies_collection_name = "debugging_strategies_test" if test_mode else "debugging_strategies"
+        self.strategies_collection = self.chroma_client.get_or_create_collection(name=self.strategies_collection_name)
+
     def load_strategy_logs(self):
-        """Loads past debugging strategies from log file."""
+        """Loads past debugging strategies from local JSON."""
         try:
             with open(self.strategy_log_file, "r") as f:
                 return json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            return []  # Return empty if file is missing or corrupted
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            logging.error(f"Failed to load strategy logs: {e}")
+            return []  # Return empty if file missing or corrupted
 
     def save_strategy_logs(self, strategies):
-        """Saves updated debugging strategies to log file."""
-        with open(self.strategy_log_file, "w") as f:
-            json.dump(strategies, f, indent=4)
+        """Saves updated debugging strategies to local JSON."""
+        try:
+            with open(self.strategy_log_file, "w") as f:
+                json.dump(strategies, f, indent=4)
+        except Exception as e:
+            logging.error(f"Failed to save strategy logs: {e}")
+
+    def normalize_snippet(self, snippet):
+        """
+        Removes triple backticks, 'python', extra blank lines, and trailing whitespace
+        to deduplicate near-identical fix attempts.
+        """
+        if not snippet:
+            return ""
+        snippet = snippet.replace("```", "")
+        snippet = snippet.replace("python", "")
+        lines = [line.strip() for line in snippet.split("\n") if line.strip()]
+        return "\n".join(lines)
+
+    def build_strategy_doc_id(self, error_type, snippet):
+        """
+        Creates a unique ID for each error_type + snippet combo,
+        e.g. via hashing to keep it short.
+        """
+        unique_str = f"{error_type}::{snippet}"
+        doc_id = hashlib.sha256(unique_str.encode("utf-8")).hexdigest()[:16]
+        return doc_id
+
+    def sync_strategy_with_chroma(self, error_type, snippet, strategy_record):
+        """
+        Upserts the snippet strategy record into the 'debugging_strategies' or
+        'debugging_strategies_test' collection.
+        """
+        try:
+            doc_id = self.build_strategy_doc_id(error_type, snippet)
+            doc_json = json.dumps(strategy_record)
+
+            # Minimal metadata for searching
+            metadata = {
+                "error_type": error_type,
+                "snippet_hash": doc_id,
+                "attempts": strategy_record.get("attempts", 0),
+                "success_rate": strategy_record.get("success_rate", 0.0),
+            }
+
+            # Check if the document already exists
+            existing_docs = self.strategies_collection.get(ids=[doc_id])
+            if existing_docs and "documents" in existing_docs and existing_docs["documents"]:
+                logging.info(f"Strategy doc ID '{doc_id}' already exists in Chroma collection '{self.strategies_collection_name}'. Updating existing entry.")
+                self.strategies_collection.update(
+                    ids=[doc_id],
+                    documents=[doc_json],
+                    metadatas=[metadata]
+                )
+            else:
+                self.strategies_collection.add(
+                    ids=[doc_id],
+                    documents=[doc_json],
+                    metadatas=[metadata]
+                )
+            logging.info(f"Synced strategy doc ID '{doc_id}' to Chroma collection '{self.strategies_collection_name}'.")
+        except Exception as e:
+            logging.error(f"Failed to sync strategy with Chroma: {e}")
 
     def get_debugging_strategy(self, error_type):
-        """Returns a debugging strategy based on historical data."""
-        strategies = self.load_strategy_logs()
+        """
+        Returns the snippet with highest success_rate for error_type,
+        or a default fallback if none found in local JSON. (No Chroma query yet.)
+        """
+        try:
+            strategies = self.load_strategy_logs()
+            matching_strategies = [s for s in strategies if s["error_type"] == error_type]
 
-        # Find a past debugging strategy for this error type
-        matching_strategies = [s for s in strategies if s["error_type"] == error_type]
-        
-        if matching_strategies:
-            # Sort by success rate and return the best strategy
-            best_strategy = sorted(matching_strategies, key=lambda x: x["success_rate"], reverse=True)[0]
-            return best_strategy["strategy"]
-        
-        # Default strategy if no past strategy exists
-        return "Standard debugging: AI will analyze logs, suggest fixes, and request verification."
+            if matching_strategies:
+                best_strategy = sorted(
+                    matching_strategies,
+                    key=lambda x: x["success_rate"],
+                    reverse=True
+                )[0]
+                return best_strategy["strategy"]
 
-    def update_strategy(self, error_type, strategy, success):
-        """Updates debugging strategy based on results."""
-        strategies = self.load_strategy_logs()
+            # Default fallback
+            return "Standard debugging: AI will analyze logs, suggest fixes, and request verification."
+        except Exception as e:
+            logging.error(f"Failed to get debugging strategy: {e}")
+            return "Standard debugging: AI will analyze logs, suggest fixes, and request verification."
 
-        # Check if this strategy exists
-        for entry in strategies:
-            if entry["error_type"] == error_type and entry["strategy"] == strategy:
-                # Update success rate
-                entry["attempts"] += 1
-                if success:
-                    entry["successful_fixes"] += 1
-                entry["success_rate"] = entry["successful_fixes"] / entry["attempts"]
-                self.save_strategy_logs(strategies)
-                return
-        
-        # Add a new strategy if it doesn't exist
-        strategies.append({
-            "error_type": error_type,
-            "strategy": strategy,
-            "attempts": 1,
-            "successful_fixes": 1 if success else 0,
-            "success_rate": 1.0 if success else 0.0
-        })
+    def update_strategy(self, error_type, snippet, success):
+        """
+        Updates or creates a debugging strategy record based on
+        the new fix attempt's success. Also upserts into Chroma.
+        """
+        try:
+            strategies = self.load_strategy_logs()
 
-        self.save_strategy_logs(strategies)
+            for entry in strategies:
+                # Match both error_type and the exact snippet
+                if entry["error_type"] == error_type and entry["strategy"] == snippet:
+                    entry["attempts"] += 1
+                    if success:
+                        entry["successful_fixes"] += 1
+                    entry["success_rate"] = entry["successful_fixes"] / entry["attempts"]
+
+                    self.save_strategy_logs(strategies)
+                    # Upsert to Chroma
+                    self.sync_strategy_with_chroma(error_type, snippet, entry)
+                    return
+
+            # If no matching entry, create a new one
+            new_record = {
+                "error_type": error_type,
+                "strategy": snippet,
+                "attempts": 1,
+                "successful_fixes": 1 if success else 0,
+                "success_rate": 1.0 if success else 0.0
+            }
+            strategies.append(new_record)
+            self.save_strategy_logs(strategies)
+
+            # Upsert to Chroma
+            self.sync_strategy_with_chroma(error_type, snippet, new_record)
+        except Exception as e:
+            logging.error(f"Failed to update strategy: {e}")
 
     def analyze_previous_fixes(self):
-        """Analyzes past fixes to identify patterns and improve strategies."""
+        """
+        Reads debug_logs.json, updates snippet success records for each fix attempt.
+        Normalizes the snippet to reduce duplicates, then upserts to local + Chroma.
+        """
         try:
             with open(self.debug_logs_file, "r") as f:
                 debug_logs = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            logging.error(f"Failed to load debug logs: {e}")
             return
 
         for entry in debug_logs:
-            # Only process logs that contain an "error" field
             if "error" in entry and "fix_attempted" in entry:
-                print(f"🔍 Processing error log: {entry['error']}")  # Debugging print
-                self.update_strategy(entry["error"], entry["fix_attempted"], success=True)
+                logging.info(f"Processing error log: {entry['error']}")
+                success_flag = (entry.get("fix_successful") is True)
+                norm_snippet = self.normalize_snippet(entry["fix_attempted"])
+                self.update_strategy(entry["error"], norm_snippet, success=success_flag)
 
 # 🚀 Example Usage
 if __name__ == "__main__":
-    debugger = DebuggingStrategy()
+    # For production, test_mode=False
+    debugger = DebuggingStrategy(test_mode=False)
     debugger.analyze_previous_fixes()
-    
-    # Example: Get a debugging strategy for a new error type
+
+    # Example: get a strategy
     strategy = debugger.get_debugging_strategy("ZeroDivisionError: division by zero")
     print(f"Recommended Debugging Strategy: {strategy}")
-
 ---
 
 # 📂 code_base/generate_knowledge_base.py
@@ -768,16 +873,37 @@ import json
 import datetime
 import re
 import os
+import logging
+import chromadb
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Add the parent directory of code_base to the Python path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from agent_manager import AgentManager
 
 class SingleAgentWorkflow:
     """Executes AI recall, debugging, and code retrieval workflows in single-agent mode."""
 
-    def __init__(self):
+    def __init__(self, test_mode=False):
+        """
+        If test_mode=True, we might switch to 'debugging_logs_test' for Chroma.
+        Otherwise, we use 'debugging_logs' for production.
+        """
         self.agent_manager = AgentManager()
         self.debug_log_file = "../logs/debug_logs.json"
         self.test_scripts_dir = "./test_scripts/"
         self.ai_timeout = 300
+
+        # Initialize Chroma client for debug logs
+        self.chroma_client = chromadb.PersistentClient(
+            path="/mnt/f/projects/ai-recall-system/chroma_db/"
+        )
+        self.debug_collection_name = "debugging_logs_test" if test_mode else "debugging_logs"
+        self.debugging_logs_collection = self.chroma_client.get_or_create_collection(
+            name=self.debug_collection_name
+        )
 
     def generate_log_id(self, prefix="log"):
         """Generates a unique ID for debugging log entries."""
@@ -786,47 +912,91 @@ class SingleAgentWorkflow:
 
     def retrieve_past_debug_logs(self):
         """Retrieve past debugging logs from local storage."""
-        print("🔍 Retrieving past debugging logs...")
+        logging.info("Retrieving past debugging logs...")
         try:
             with open(self.debug_log_file, "r") as f:
                 logs = json.load(f)
-                if not logs:
-                    print("⚠ No debugging logs found.")
+                valid_logs = []
+                for log in logs:
+                    if "id" in log and "error" in log and "stack_trace" in log:
+                        valid_logs.append(log)
+                    else:
+                        logging.warning(f"Skipping invalid log entry: {log}")
+                if not valid_logs:
+                    logging.warning("No valid debugging logs found.")
                     return []
-                print(f"✅ Retrieved {len(logs)} logs.")
-                return logs
+                logging.info(f"Retrieved {len(valid_logs)} valid logs.")
+                return valid_logs
         except (FileNotFoundError, json.JSONDecodeError) as e:
-            print(f"❌ Debugging log file missing or corrupted. Error: {e}")
+            logging.error(f"Debugging log file missing or corrupted. Error: {e}")
             return []
+
+    def sync_debug_log_with_chroma(self, entry):
+        """
+        Upserts the updated debug log entry into the 'debugging_logs' (or 'debugging_logs_test') collection.
+        Each entry is stored as a separate document with ID = entry["id"].
+        """
+        try:
+            doc_json = json.dumps(entry)
+            metadata = {
+                "error": entry.get("error", ""),
+                "timestamp": entry.get("timestamp", ""),
+                "resolved": entry.get("resolved", False),
+                "fix_successful": entry.get("fix_successful", False),
+            }
+            existing_docs = self.debugging_logs_collection.get(ids=[entry["id"]])
+            if existing_docs and "documents" in existing_docs and existing_docs["documents"]:
+                self.debugging_logs_collection.update(
+                    ids=[entry["id"]],
+                    documents=[doc_json],
+                    metadatas=[metadata]
+                )
+                logging.info(f"Updated log entry '{entry['id']}' in Chroma collection '{self.debug_collection_name}'.")
+            else:
+                self.debugging_logs_collection.add(
+                    ids=[entry["id"]],
+                    documents=[doc_json],
+                    metadatas=[metadata]
+                )
+                logging.info(f"Added new log entry '{entry['id']}' to Chroma collection '{self.debug_collection_name}'.")
+        except Exception as e:
+            logging.error(f"Failed to sync debug log with Chroma: {e}")
 
     def run_workflow(self):
         """Executes a structured AI debugging & recall workflow for ALL pending issues."""
-        print("\n🚀 Starting Single-Agent AI Workflow...\n")
+        logging.info("Starting Single-Agent AI Workflow...")
 
         past_debug_logs = self.retrieve_past_debug_logs()
         if not past_debug_logs:
-            print("❌ No past debugging logs available.")
+            logging.error("No past debugging logs available.")
             return
 
-        print(f"🔍 Checking for unresolved debugging issues...")
+        logging.info("Checking for unresolved debugging issues...")
         unresolved_logs = [
-            log for log in past_debug_logs 
+            log for log in past_debug_logs
             if log.get("resolved") is False and "stack_trace" in log
         ]
 
         if not unresolved_logs:
-            print("✅ No unresolved debugging issues found.")
+            logging.info("No unresolved debugging issues found.")
             return
 
-        print(f"🔍 Found {len(unresolved_logs)} unresolved logs to process.")
+        logging.info(f"Found {len(unresolved_logs)} unresolved logs to process.")
 
         for error_entry in unresolved_logs:
-            script_name = error_entry.get("stack_trace", "").split("'")[1] if "stack_trace" in error_entry else None
+            script_name = None
+            stack_trace = error_entry.get("stack_trace", "")
+            # e.g. "File 'test_db_handler.py', line 9, in connect_to_database"
+            # We'll parse out the script name by splitting on quotes
+            parts = stack_trace.split("'")
+            if len(parts) >= 2:
+                script_name = parts[1]
+
             if not script_name:
-                print(f"⚠ Skipping log entry with missing `stack_trace`: {error_entry}")
+                logging.warning(f"Skipping log entry with missing `stack_trace`: {error_entry}")
                 continue
 
-            print(f"🔹 AI will attempt to fix `{script_name}` based on debugging logs.")
+            logging.info(f"AI will attempt to fix `{script_name}` based on debugging logs.")
 
             script_path = os.path.join(self.test_scripts_dir, script_name)
             script_content = ""
@@ -835,33 +1005,40 @@ class SingleAgentWorkflow:
                     script_content = f.read()
 
             if not script_content.strip():
-                print(f"⚠ `{script_name}` is empty or unavailable. Skipping AI fix.")
+                logging.warning(f"`{script_name}` is empty or unavailable. Skipping AI fix.")
                 continue
 
-            print("🔹 AI Analyzing Debugging Logs...")
+            logging.info("AI Analyzing Debugging Logs...")
             ai_fix_suggestion = self.agent_manager.delegate_task(
                 "debug",
-                f"Analyze `{script_name}` and find the source of the following error: {error_entry['error']}. "
-                "Read the script below and determine how to correctly fix it."
-                "Your response MUST ONLY contain the corrected function inside triple backticks (```python ... ```), NO explanations."
-                "\nHere is the current content of `{script_name}`:\n"
-                "```python\n"
-                f"{script_content}\n"
-                "```",
+                (
+                    f"Analyze `{script_name}` and find the source of the following error: {error_entry['error']}. "
+                    "Your response MUST ONLY contain the corrected function inside triple backticks (```python ...```), NO explanations.\n"
+                    f"Here is the current content of `{script_name}`:\n"
+                    "```python\n"
+                    f"{script_content}\n"
+                    "```"
+                ),
                 timeout=self.ai_timeout
             )
 
             extracted_fix = self.agent_manager.preprocess_ai_response(ai_fix_suggestion)
 
-            print(f"✅ AI Suggested Fix:\n{extracted_fix}\n")
+            logging.info(f"AI Suggested Fix:\n{extracted_fix}\n")
             confirmation = input("Did the fix work? (y/n): ").strip().lower()
             fix_verified = confirmation == "y"
 
+            # Update the local JSON record
             error_entry["fix_attempted"] = extracted_fix
             error_entry["resolved"] = fix_verified
             error_entry["fix_successful"] = fix_verified
 
+            # For logging, optionally set a timestamp if missing
+            if "timestamp" not in error_entry:
+                error_entry["timestamp"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
             try:
+                # Update local JSON
                 with open(self.debug_log_file, "r") as f:
                     logs = json.load(f)
 
@@ -872,18 +1049,20 @@ class SingleAgentWorkflow:
                 with open(self.debug_log_file, "w") as f:
                     json.dump(logs, f, indent=4)
 
-                print("✅ Debugging log successfully updated in `debug_logs.json`.")
+                logging.info("Debugging log successfully updated in `debug_logs.json`.")
+
+                # **UPSET to Chroma** (real-time sync)
+                self.sync_debug_log_with_chroma(error_entry)
 
             except Exception as e:
-                print(f"❌ Failed to update debugging log: {e}")
+                logging.error(f"Failed to update debugging log: {e}")
 
-        print("\n✅ Single-Agent AI Workflow Completed!\n")
+        logging.info("Single-Agent AI Workflow Completed!")
 
 # 🚀 Example Usage
 if __name__ == "__main__":
-    workflow = SingleAgentWorkflow()
+    workflow = SingleAgentWorkflow(test_mode=False)  # or True if you want test collection
     workflow.run_workflow()
-
 ---
 
 # 📂 code_base/network_utils.py
@@ -1052,39 +1231,44 @@ if __name__ == "__main__":
 
 import datetime
 import json
-import chromadb
-import traceback
 import time
+import traceback
+
+import chromadb
+
+# Import detect_api_url from your local network_utils.py
+# (Assuming network_utils.py is in the same directory or on the PYTHONPATH)
+from network_utils import detect_api_url
+
 
 class WorkSessionLogger:
     """Handles AI work session logging, retrieval, and structured summaries."""
 
     def __init__(self):
         self.session_log_file = "../logs/work_session.md"
-        self.chroma_client = chromadb.PersistentClient(path="/mnt/f/projects/ai-recall-system/chroma_db/")
-        self.collection = self.chroma_client.get_or_create_collection(name="work_sessions")
-        self.api_url = self.detect_api_url()  # Automatically detect correct API URL
+        # Connect to your local ChromaDB
+        self.chroma_client = chromadb.PersistentClient(
+            path="/mnt/f/projects/ai-recall-system/chroma_db/"
+        )
+        self.collection = self.chroma_client.get_or_create_collection(
+            name="work_sessions"
+        )
 
-    def detect_api_url(self):
-        """Detect the correct API URL based on whether we are in WSL or native Windows."""
-        wsl_ip = "172.17.128.1"
-        default_url = "http://localhost:1234/v1/chat/completions"
+        # Use detect_api_url from network_utils
+        self.api_url = detect_api_url()
+        print(f"🔹 Using API URL: {self.api_url}")
 
-        try:
-            with open("/proc/version", "r") as f:
-                if "microsoft" in f.read().lower():
-                    print(f"🔹 Detected WSL! Using Windows IP: {wsl_ip}")
-                    return f"http://{wsl_ip}:1234/v1/chat/completions"
-        except FileNotFoundError:
-            pass
-
-        print(f"🔹 Using default API URL: {default_url}")
-        return default_url
-
-    def log_work_session(self, task, files_changed=None, error_details=None, execution_time=None, outcome=None):
+    def log_work_session(
+        self,
+        task,
+        files_changed=None,
+        error_details=None,
+        execution_time=None,
+        outcome=None
+    ):
         """Logs a structured work session entry."""
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
+
         log_entry = {
             "timestamp": timestamp,
             "task": task,
@@ -1095,7 +1279,10 @@ class WorkSessionLogger:
         }
 
         # Store log in ChromaDB
-        self.collection.add(ids=[timestamp], documents=[json.dumps(log_entry)])
+        self.collection.add(
+            ids=[timestamp],
+            documents=[json.dumps(log_entry)]
+        )
 
         # Format for Markdown
         markdown_entry = f"## [{timestamp}] {task}\n"
@@ -1111,7 +1298,10 @@ class WorkSessionLogger:
         print(f"✅ Work session logged successfully: {task}")
 
     def log_ai_execution(self, function, *args, **kwargs):
-        """Wraps AI execution to log its behavior."""
+        """
+        Wraps an AI function execution to automatically log timing,
+        success/failure, and any errors encountered.
+        """
         start_time = time.time()
         try:
             result = function(*args, **kwargs)
@@ -1134,7 +1324,7 @@ class WorkSessionLogger:
             return None
 
     def retrieve_recent_sessions(self, hours=1):
-        """Retrieves work session logs from the past `hours`."""
+        """Retrieves work session logs from the past `hours` by parsing the Markdown file."""
         cutoff_time = datetime.datetime.now() - datetime.timedelta(hours=hours)
 
         try:
@@ -1154,21 +1344,23 @@ class WorkSessionLogger:
 
         return recent_logs
 
-# 🚀 Example Usage
+
+# Example usage (if you run this script directly)
 if __name__ == "__main__":
     logger = WorkSessionLogger()
-    
-    # Example AI execution logging
+
+    # Mock AI task function
     def sample_ai_task():
-        """Mock AI task function."""
+        """Simulate AI doing something."""
         time.sleep(1)
         return "AI completed task successfully."
 
+    # Demonstrate logging an AI execution
     logger.log_ai_execution(sample_ai_task)
 
-    # Example manual logging
+    # Demonstrate manual logging
     logger.log_work_session(
-        "Refactored AI work session logging",
+        task="Refactored AI work session logging",
         files_changed=["work_session_logger.py", "query_chroma.py"],
         error_details="None",
         execution_time=1.23,
@@ -2518,6 +2710,52 @@ if __name__ == "__main__":
 
 ---
 
+# 📂 scripts/clear_chroma_duplicates.py
+
+import chromadb
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Initialize Chroma client
+chroma_client = chromadb.PersistentClient(
+    path="/mnt/f/projects/ai-recall-system/chroma_db/"
+)
+debugging_logs_collection = chroma_client.get_or_create_collection(name="debugging_logs")
+
+def clear_duplicates():
+    """Clear duplicate entries from the ChromaDB collection."""
+    logging.info("Retrieving all entries from ChromaDB collection...")
+    all_entries = debugging_logs_collection.get()
+
+    if not all_entries or "documents" not in all_entries:
+        logging.info("No entries found in ChromaDB collection.")
+        return
+
+    documents = all_entries["documents"]
+    ids = all_entries["ids"]
+    unique_ids = set()
+    duplicates = []
+
+    for doc_id, doc in zip(ids, documents):
+        if doc_id in unique_ids:
+            duplicates.append(doc_id)
+        else:
+            unique_ids.add(doc_id)
+
+    if not duplicates:
+        logging.info("No duplicate entries found.")
+        return
+
+    logging.info(f"Found {len(duplicates)} duplicate entries. Removing duplicates...")
+    debugging_logs_collection.delete(ids=duplicates)
+    logging.info("Duplicates removed successfully.")
+
+if __name__ == "__main__":
+    clear_duplicates()
+---
+
 # 📂 scripts/compiled_knowledge.py
 
 import os
@@ -2667,7 +2905,7 @@ CODEBASE_DIRS = [os.path.join(BASE_DIR, "code_base"), os.path.join(BASE_DIR, "sc
 OUTPUT_FILE = os.path.join(BASE_DIR, "codebase_inventory.md")
 TREE_OUTPUT = os.path.join(BASE_DIR, "codebase_structure.txt")
 
-def generate_directory_tree(output_file, depth=3):
+def generate_directory_tree(output_file, depth=5):
     """Generate a tree structure of the codebase."""
     os.system(f"tree -L {depth} --dirsfirst --filelimit 50 {BASE_DIR} > {output_file}")
 
@@ -2873,65 +3111,47 @@ import chromadb
 # Initialize ChromaDB in WSL-compatible path
 chroma_client = chromadb.PersistentClient(path="/mnt/f/projects/ai-recall-system/chroma_db/")
 
-# Define collections
-collections = {
+# Production (main) collections
+prod_collections = {
     "blueprints": "Stores AI project blueprints and recursive blueprint revisions.",
     "debugging_logs": "Logs AI debugging sessions, fixes, and error resolutions.",
+    "debugging_strategies": "Stores success/failure rates for each snippet and error_type.",
     "execution_logs": "Tracks AI task execution history and outcomes.",
     "work_sessions": "Stores AI work sessions, timestamps, and activity logs.",
-    "knowledge_base": "General AI memory storage (guidelines, best practices, key learnings)."
+    "knowledge_base": "General AI memory storage (guidelines, best practices, key learnings).",
+    "blueprint_versions": "Stores version docs for each blueprint.",
+    "blueprint_revisions": "Holds blueprint revision proposals/triggers.",
+    "project_codebase": "Indexed codebase for aggregator searching."
 }
 
-# Create collections if they don’t exist
-for name, description in collections.items():
-    collection = chroma_client.get_or_create_collection(name=name)
-    print(f"✅ Collection '{name}' initialized: {description}")
+# Test collections (for running with mock data or during test scripts)
+test_collections = {
+    "blueprints_test": "Test collection for blueprint documents or meltdown triggers, etc.",
+    "debugging_logs_test": "Test collection for debug logs with mock data.",
+    "debugging_strategies_test": "Stores success/failure rates for each snippet and error_type.",
+    "execution_logs_test": "Test collection for blueprint execution logs (mock).",
+    "work_sessions_test": "Test collection for AI work sessions in test context.",
+    "knowledge_base_test": "Test collection for knowledge docs used in testing.",
+    "blueprint_versions_test": "Test collection for blueprint versions (multiple docs).",
+    "blueprint_revisions_test": "Test collection for blueprint revision proposals (test).",
+    "project_codebase_test": "Test indexing aggregator usage on mock code."
+}
 
----
-
-# 📂 scripts/log_work_session.py
-
-import chromadb
-import datetime
-import json
-
-chroma_client = chromadb.PersistentClient(path="/mnt/f/projects/ai-recall-system/chroma_db/")
-collection = chroma_client.get_or_create_collection(name="work_sessions")
-
-def log_work_session(description, files_changed=None, error_fixed=None, result=None):
-    """Logs work session in ChromaDB and work_session.md."""
-    log_data = {
-        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "description": description,
-        "files_changed": files_changed or [],
-        "error_fixed": error_fixed,
-        "result": result
-    }
-
-    # Store log in ChromaDB
-    collection.add(ids=[log_data["timestamp"]], documents=[json.dumps(log_data)])
-
-    # Also store in markdown file
-    log_entry = f"## [{log_data['timestamp']}] {description}\n"
-    if files_changed:
-        log_entry += f"- **Files Changed:** {', '.join(files_changed)}\n"
-    if error_fixed:
-        log_entry += f"- **Error Fixed:** {error_fixed}\n"
-    if result:
-        log_entry += f"- **Result:** {result}\n"
-
-    with open("../logs/work_session.md", "a") as f:
-        f.write(log_entry + "\n")
-
-    print("✅ Work session logged successfully.")
+def create_collections(collection_dict):
+    """
+    Creates or retrieves each collection in the given dictionary.
+    Prints a confirmation line for each.
+    """
+    for name, description in collection_dict.items():
+        collection = chroma_client.get_or_create_collection(name=name)
+        print(f"✅ Collection '{name}' initialized: {description}")
 
 if __name__ == "__main__":
-    log_work_session(
-        "Refactored AI recall system",
-        files_changed=["query_chroma.py", "work_session_logger.py"],
-        error_fixed="Optimized retrieval filtering",
-        result="Blueprint recall now works correctly."
-    )
+    print("=== Initializing Production Collections ===")
+    create_collections(prod_collections)
+
+    print("\n=== Initializing Test Collections ===")
+    create_collections(test_collections)
 
 ---
 
@@ -2947,6 +3167,7 @@ blueprint_versions = chroma_client.get_or_create_collection(name="blueprint_vers
 revision_proposals = chroma_client.get_or_create_collection(name="blueprint_revisions")
 work_sessions = chroma_client.get_or_create_collection(name="work_sessions")
 debugging_logs = chroma_client.get_or_create_collection(name="debugging_logs")
+debugging_strategies = chroma_client.get_or_create_collection(name="debugging_strategies")
 
 def list_execution_logs(limit=100):
     """Retrieve and print a summary of stored execution logs."""
@@ -3167,7 +3388,7 @@ def retrieve_code_snippets(query: str, n_results: int = 3):
     collection = client.get_or_create_collection(name=COLLECTION_NAME)
 
     # 2) Load embeddings model (same as used when indexing)
-    emb = HuggingFaceEmbeddings()
+    emb = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
     query_embedding = emb.embed_query(query)
 
     # 3) Query the collection by embedding

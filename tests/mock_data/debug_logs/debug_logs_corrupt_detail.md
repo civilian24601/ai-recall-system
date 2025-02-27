@@ -1,3 +1,5 @@
+# These are the descriptions of all entries in the debug_logs_corrupt.json dummy file. #
+
 #1 Missing comma between "fix_attempted" and "fix_successful"
 #2 Truncated object (no closing brace)
 #3 Missing quotes around 'execution_time'

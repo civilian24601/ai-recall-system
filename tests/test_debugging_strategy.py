@@ -1,101 +1,114 @@
-#!/usr/bin/env python3
-"""
-test_debugging_strategy.py
-
-A test script that references debugging_strategy.py from code_base.
-It uses test logs in /tests/test_logs/ and mock JSON from /tests/mock_data/debug_logs/.
-"""
-
 import os
-import sys
 import json
-
-# 1) Adjust the import path so we can import DebuggingStrategy from code_base
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-PARENT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
-sys.path.append(PARENT_DIR)
+import shutil
+import pytest
 
 from code_base.debugging_strategy import DebuggingStrategy
 
-class TestDebuggingStrategy:
+@pytest.mark.parametrize("mock_filename, expect_corrupt", [
+    ("debug_logs_small.json", False),
+    ("debug_logs_medium.json", False),
+    ("debug_logs_large.json", False),
+    ("debug_logs_corrupt.json", True),
+])
+def test_analyze_previous_fixes_param(mock_filename, expect_corrupt):
     """
-    A test harness that overrides debugging_strategy.py's file paths to:
-      - debug_logs_file -> /tests/test_logs/debug_logs_test.json
-      - strategy_log_file -> /tests/test_logs/debugging_strategy_log_test.json
-
-    Then we load mock data (small/medium/large) from:
-      /tests/mock_data/debug_logs/*.json
-    and run 'analyze_previous_fixes()' to see if snippet deduping & success rates work.
+    Parametrized test for DebuggingStrategy.analyze_previous_fixes().
+    Copies mock_filename -> debug_logs_test.json, 
+    then calls .analyze_previous_fixes() in test_mode.
     """
 
-    def __init__(self):
-        # We'll keep these logs separate from your main logs folder
-        self.test_logs_dir = os.path.join(SCRIPT_DIR, "test_logs")
-        # Ensure /tests/test_logs/ exists (in case it's not created yet)
-        if not os.path.exists(self.test_logs_dir):
-            os.makedirs(self.test_logs_dir)
+    mock_data_dir = os.path.join("tests", "mock_data", "debug_logs")
+    src_path = os.path.join(mock_data_dir, mock_filename)
 
-        # Create an instance of DebuggingStrategy
-        self.strategy = DebuggingStrategy()
-        # Overwrite the paths to point to /tests/test_logs/
-        self.strategy.debug_logs_file = os.path.join(self.test_logs_dir, "debug_logs_test.json")
-        self.strategy.strategy_log_file = os.path.join(self.test_logs_dir, "debugging_strategy_log_test.json")
+    test_logs_dir = os.path.join("tests", "test_logs")
+    os.makedirs(test_logs_dir, exist_ok=True)
 
-    def load_mock_json(self, mock_json_filename):
-        """
-        Copies the given mock JSON (like debug_logs_small.json) from
-        /tests/mock_data/debug_logs/ into /tests/test_logs/debug_logs_test.json
-        so the strategy's analyze_previous_fixes() can read it.
-        """
-        # Path to your mock_data debug logs
-        mock_data_dir = os.path.join(SCRIPT_DIR, "mock_data", "debug_logs")
-        src_path = os.path.join(mock_data_dir, mock_json_filename)
-        dst_path = self.strategy.debug_logs_file  # debug_logs_test.json
+    debug_logs_test_path = os.path.join(test_logs_dir, "debug_logs_test.json")
+    debugging_strategy_test_path = os.path.join(test_logs_dir, "debugging_strategy_log_test.json")
 
-        if not os.path.exists(src_path):
-            print(f"⚠ Could not find mock JSON: {src_path}")
-            return False
+    # Copy the chosen mock file to debug_logs_test.json
+    shutil.copyfile(src_path, debug_logs_test_path)
 
-        with open(src_path, "r") as src_file:
-            data = json.load(src_file)
+    # If there's an old strategy log, remove it
+    if os.path.exists(debugging_strategy_test_path):
+        os.remove(debugging_strategy_test_path)
 
-        with open(dst_path, "w") as out_file:
-            json.dump(data, out_file, indent=2)
+    # Create a DebuggingStrategy in test_mode
+    strategy = DebuggingStrategy(test_mode=True)
 
-        print(f"Loaded mock data from {src_path} -> {dst_path}")
-        return True
+    # Now call analyze_previous_fixes()
+    # If 'corrupt' is True, we might see partial or no logs processed
+    # We'll just let it run. If your code gracefully logs an error, that's fine.
+    strategy.analyze_previous_fixes()
 
-    def run_test(self, mock_json_filename, description):
-        """
-        General method to load a mock JSON log, run 'analyze_previous_fixes()',
-        and print a short summary. 'description' clarifies which scenario is tested.
-        """
-        print(f"\n=== Running Test: {description} ===")
-        if not self.load_mock_json(mock_json_filename):
-            print("Skipping test due to missing mock file.")
-            return
+    # Check if debugging_strategy_log_test.json was created or partially updated
+    if os.path.exists(debugging_strategy_test_path):
+        with open(debugging_strategy_test_path, "r") as f:
+            data = json.load(f)
 
-        self.strategy.analyze_previous_fixes()
-        print(f"Test '{description}' completed. Check {self.strategy.strategy_log_file} for updated strategies.")
+        if expect_corrupt:
+            # Possibly data might be empty or partial, let's not be too strict
+            pass
+        else:
+            # For normal logs, we expect at least something
+            assert len(data) > 0, f"Expected some strategy entries for {mock_filename}, found none."
+    else:
+        # If file doesn't exist, maybe the logs were fully corrupt or no fix_attempted
+        if not expect_corrupt:
+            pytest.fail(f"Expected {debugging_strategy_test_path} to be created for {mock_filename}, but it wasn't.")
 
-    def cleanup_test_logs(self):
-        """
-        Optional method to remove or reset the test logs after each run, if desired.
-        """
-        for fname in ["debug_logs_test.json", "debugging_strategy_log_test.json"]:
-            path = os.path.join(self.test_logs_dir, fname)
-            if os.path.exists(path):
-                os.remove(path)
+    # Cleanup: remove both logs
+    if os.path.exists(debug_logs_test_path):
+        os.remove(debug_logs_test_path)
+    if os.path.exists(debugging_strategy_test_path):
+        os.remove(debugging_strategy_test_path)
 
-if __name__ == "__main__":
-    tester = TestDebuggingStrategy()
 
-    # Example usage: test small, medium, and large mock logs
-    # Adjust filenames if you want more scenarios.
+def test_update_strategy_directly():
+    """
+    Non-parametrized test: we directly call .update_strategy() 
+    to ensure it creates an entry in debugging_strategy_log_test.json.
+    """
+    test_logs_dir = os.path.join("tests", "test_logs")
+    os.makedirs(test_logs_dir, exist_ok=True)
 
-    tester.run_test("debug_logs_small.json", "Small logs test")
-    tester.run_test("debug_logs_medium.json", "Medium logs test")
-    tester.run_test("debug_logs_large.json", "Large logs test")
+    debug_logs_test_path = os.path.join(test_logs_dir, "debug_logs_test.json")
+    strategy_log_path = os.path.join(test_logs_dir, "debugging_strategy_log_test.json")
 
-    # If you want to remove test logs after, you can:
-    # tester.cleanup_test_logs()
+    # Clean up any old logs
+    if os.path.exists(debug_logs_test_path):
+        os.remove(debug_logs_test_path)
+    if os.path.exists(strategy_log_path):
+        os.remove(strategy_log_path)
+
+    # Create DebuggingStrategy
+    strategy = DebuggingStrategy(test_mode=True)
+
+    snippet = """```python
+def divide(a, b):
+    return a / b
+```"""
+
+    # We'll add a new record with success=True
+    strategy.update_strategy("ZeroDivisionError: division by zero", snippet, success=True)
+
+    # Now check debugging_strategy_log_test.json
+    assert os.path.exists(strategy_log_path), "Expected strategy log to be created."
+
+    with open(strategy_log_path, "r") as f:
+        data = json.load(f)
+
+    # Exactly 1 new record 
+    matching = [
+        s for s in data 
+        if s["error_type"] == "ZeroDivisionError: division by zero"
+    ]
+    assert len(matching) == 1, "Did not find exactly one record for ZeroDivisionError snippet."
+
+    rec = matching[0]
+    assert rec.get("success_rate") == 1.0, "Expected success_rate of 1.0 for a single success."
+
+    # Cleanup
+    if os.path.exists(strategy_log_path):
+        os.remove(strategy_log_path)

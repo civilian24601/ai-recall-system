@@ -23,6 +23,7 @@
 │   ├── bootstrap_scan.py
 │   ├── generate_debug_report.py
 │   ├── generate_project_dump.py
+│   ├── log_work_session.py
 │   ├── project_advanced_details.md
 │   ├── roadmap.md
 │   ├── start_chromadb.py
@@ -45,6 +46,11 @@
 │   │   ├── length.bin
 │   │   └── link_lists.bin
 │   ├── 3cd7184a-c98e-42fb-8988-9c6823f995d9
+│   │   ├── data_level0.bin
+│   │   ├── header.bin
+│   │   ├── length.bin
+│   │   └── link_lists.bin
+│   ├── 40446d0c-c3df-467b-b504-8ab10578670c
 │   │   ├── data_level0.bin
 │   │   ├── header.bin
 │   │   ├── length.bin
@@ -83,6 +89,8 @@
 │   │   └── link_lists.bin
 │   ├── F:
 │   │   └── projects
+│   │       └── ai-recall-system
+│   │           └── chroma_db
 │   ├── a96a209e-a28e-4c56-81eb-9ed166c96442
 │   │   ├── data_level0.bin
 │   │   ├── header.bin
@@ -121,7 +129,10 @@
 │   └── chroma.sqlite3
 ├── code_base
 │   ├── __pycache__
-│   │   └── agent_manager.cpython-310.pyc
+│   │   ├── __init__.cpython-310.pyc
+│   │   ├── agent_manager.cpython-310.pyc
+│   │   ├── debugging_strategy.cpython-310.pyc
+│   │   └── network_utils.cpython-310.pyc
 │   ├── agents
 │   │   ├── architect_agent.py
 │   │   ├── devops_agent.py
@@ -137,6 +148,7 @@
 │   │   ├── test_db_handler.py
 │   │   ├── test_math_operations.py
 │   │   └── user_auth.py
+│   ├── __init__.py
 │   ├── agent_manager.py
 │   ├── api_structure.py
 │   ├── core_architecture.py
@@ -155,7 +167,36 @@
 │   ├── pipeline_overview.md
 │   └── testing_plan.md
 ├── experiments
+├── frontend
+│   └── my-next-frontend
+│       ├── app
+│       │   ├── chat
+│       │   │   └── page.tsx
+│       │   ├── favicon.ico
+│       │   ├── globals.css
+│       │   ├── layout.tsx
+│       │   └── page.tsx
+│       ├── node_modules  [74 entries exceeds filelimit, not opening dir]
+│       ├── public
+│       │   ├── file.svg
+│       │   ├── globe.svg
+│       │   ├── next.svg
+│       │   ├── vercel.svg
+│       │   └── window.svg
+│       ├── src
+│       │   └── services
+│       │       └── aiService.ts
+│       ├── README.md
+│       ├── eslint.config.mjs
+│       ├── next-env.d.ts
+│       ├── next.config.ts
+│       ├── package-lock.json
+│       ├── package.json
+│       ├── postcss.config.mjs
+│       ├── tailwind.config.ts
+│       └── tsconfig.json
 ├── knowledge_base
+│   ├── TEST_SCENARIOS.md
 │   ├── ai_and_user_interaction_guidelines.md
 │   ├── ai_coding_guidelines.md
 │   ├── api_structure.md
@@ -175,7 +216,6 @@
 │   ├── daily_summary.json
 │   ├── daily_summary.md
 │   ├── debug_logs.json
-│   ├── debug_logs_old.json
 │   ├── debugging_strategy_log.json
 │   ├── project_full_dump.md
 │   ├── project_structure.json
@@ -183,7 +223,8 @@
 ├── notion_docs
 │   ├── 2-12 work summary 1982d727cb57802c9f31e6d694ac0e30.md
 │   ├── Hyper-Sprint to MVP 1972d727cb5780aaab15f645bedb208a.md
-│   └── Inventory_Report 1972d727cb57800db0eec6a5092d7caa.md
+│   ├── Inventory_Report 1972d727cb57800db0eec6a5092d7caa.md
+│   └── Sprint 1 Week 3
 ├── scripts
 │   ├── __pycache__
 │   │   ├── blueprint_execution.cpython-310.pyc
@@ -193,13 +234,13 @@
 │   ├── capture_git_changes.py
 │   ├── check_doc_count.py
 │   ├── cleanup_collections.py
+│   ├── clear_chroma_duplicates.py
 │   ├── compiled_knowledge.py
 │   ├── debug_chroma.py
 │   ├── dependencies_compiler.py
 │   ├── generate_codebase_inventory.py
 │   ├── index_codebase.py
 │   ├── initialize_chroma.py
-│   ├── log_work_session.py
 │   ├── query_chroma.py
 │   ├── query_codebase_chunks.py
 │   ├── retrieve_codebase.py
@@ -209,9 +250,73 @@
 │   │   ├── test_agent_manager.cpython-310-pytest-8.3.4.pyc
 │   │   ├── test_blueprint_execution.cpython-310-pytest-8.3.4.pyc
 │   │   └── test_query_chroma.cpython-310-pytest-8.3.4.pyc
+│   ├── mock_data
+│   │   ├── codebase
+│   │   │   ├── large_project
+│   │   │   │   ├── large_mock_file_01.py
+│   │   │   │   ├── large_mock_file_02.py
+│   │   │   │   ├── large_mock_file_03.py
+│   │   │   │   ├── large_mock_file_04.py
+│   │   │   │   ├── large_mock_file_05.py
+│   │   │   │   ├── large_mock_file_06.py
+│   │   │   │   ├── large_mock_file_07.py
+│   │   │   │   ├── large_mock_file_08.py
+│   │   │   │   ├── large_mock_file_09.py
+│   │   │   │   ├── large_mock_file_10.py
+│   │   │   │   ├── large_mock_file_11.py
+│   │   │   │   ├── large_mock_file_12.py
+│   │   │   │   ├── large_mock_file_13.py
+│   │   │   │   ├── large_mock_file_14.py
+│   │   │   │   ├── large_mock_file_15.py
+│   │   │   │   ├── large_mock_file_16.py
+│   │   │   │   ├── large_mock_file_17.py
+│   │   │   │   ├── large_mock_file_18.py
+│   │   │   │   ├── large_mock_file_19.py
+│   │   │   │   ├── large_mock_file_20.py
+│   │   │   │   ├── large_mock_file_21.py
+│   │   │   │   ├── large_mock_file_22.py
+│   │   │   │   ├── large_mock_file_23.py
+│   │   │   │   ├── large_mock_file_24.py
+│   │   │   │   ├── large_mock_file_25.py
+│   │   │   │   ├── large_mock_file_26.py
+│   │   │   │   ├── large_mock_file_27.py
+│   │   │   │   ├── large_mock_file_28.py
+│   │   │   │   ├── large_mock_file_29.py
+│   │   │   │   └── large_mock_file_30.py
+│   │   │   ├── medium_project
+│   │   │   │   ├── aggregator_module_mock.py
+│   │   │   │   ├── api_routes_mock.py
+│   │   │   │   ├── auth_mock.py
+│   │   │   │   ├── calc_utils_mock.py
+│   │   │   │   ├── db_manager_mock.py
+│   │   │   │   ├── logging_helpers_mock.py
+│   │   │   │   ├── main_controller_mock.py
+│   │   │   │   ├── multi_agent_mock.py
+│   │   │   │   ├── session_manager_mock.py
+│   │   │   │   └── stats_processor_mock.py
+│   │   │   └── mini_project
+│   │   │       ├── db_handler_mock.py
+│   │   │       ├── main_ai_mock.py
+│   │   │       └── network_utils_mock.py
+│   │   ├── debug_logs
+│   │   │   ├── debug_logs_corrupt.json
+│   │   │   ├── debug_logs_corrupt_detail.md
+│   │   │   ├── debug_logs_large.json
+│   │   │   ├── debug_logs_medium.json
+│   │   │   └── debug_logs_small.json
+│   │   ├── execution_logs
+│   │   │   ├── blueprint_versions_sample.json
+│   │   │   ├── execution_logs_large.json
+│   │   │   └── execution_logs_small.json
+│   │   └── knowledge_docs
+│   ├── test_logs
+│   │   ├── debug_logs_test.json
+│   │   └── debugging_strategy_log_test.json
 │   ├── test_agent_manager.py
 │   ├── test_blueprint_execution.py
+│   ├── test_debugging_strategy.py
 │   └── test_query_chroma.py
+├── Sprint_Overview_Latest.md
 ├── codebase_inventory.md
 ├── codebase_inventory.txt
 ├── codebase_inventory_V2.md
@@ -220,4 +325,4 @@
 ├── compiled_knowledge.txt
 └── dependencies_report.md
 
-46 directories, 174 files
+66 directories, 259 files
