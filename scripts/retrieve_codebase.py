@@ -2,80 +2,129 @@
 """
 retrieve_codebase.py
 
-Queries your 'project_codebase' collection in ChromaDB to find relevant code/doc
-chunks using embeddings. This aligns with the new index_codebase.py approach
-(word-based or line-based chunking, stable doc_ids, hashed chunks, etc.).
+Performs either:
+  - EMBEDDING-BASED semantic search (default)
+  - (Optional) naive substring search if '--naive' is passed
 
 Usage:
-   python3 retrieve_codebase.py "division error" 5
+   python3 retrieve_codebase.py "division error" [n_results] [--naive]
 
-Which will retrieve the top 5 matching chunks for "division error".
+Examples:
+   python3 retrieve_codebase.py "division error" 5
+   python3 retrieve_codebase.py "magic_substring" 10 --naive
+
+One script to unify both approaches, retiring the old query_codebase_chunks.py.
 """
 
 import sys
 import chromadb
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 
 CHROMA_DB_PATH = "/mnt/f/projects/ai-recall-system/chroma_db"
 COLLECTION_NAME = "project_codebase"
 
-def retrieve_code_snippets(query: str, n_results: int = 3):
-    """
-    Performs an embedding-based semantic search over 'project_codebase' in Chroma.
-    Returns a list of (doc_content, metadata) tuples.
-    """
-    # 1) Connect to Chroma
-    client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
-    collection = client.get_or_create_collection(name=COLLECTION_NAME)
 
-    # 2) Load embeddings model (same as used when indexing)
+def naive_substring_search(docs, query):
+    """
+    Basic substring search over chunk text.
+    Return a list of (doc_text, meta, doc_id).
+    """
+    results = []
+    for i, doc_text in enumerate(docs["documents"]):
+        if query.lower() in doc_text.lower():
+            meta = docs["metadatas"][i]
+            doc_id = docs["ids"][i]
+            results.append((doc_text, meta, doc_id))
+    return results
+
+def embedding_search(collection, query, n_results=3):
     emb = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
     query_embedding = emb.embed_query(query)
-
-    # 3) Query the collection by embedding
-    #    This uses semantic similarity to find relevant chunks
     results = collection.query(
         query_embeddings=[query_embedding],
         n_results=n_results
     )
-
-    matched_chunks = []
+    matched = []
     if results and "documents" in results:
-        # Typically results["documents"] is a list of lists
-        # We'll iterate the top-level list => results["documents"][0]
         docs = results["documents"][0]
         metas = results["metadatas"][0]
-        for doc, meta in zip(docs, metas):
-            matched_chunks.append((doc, meta))
+        ids = results["ids"][0]
+        for doc, meta, _id in zip(docs, metas, ids):
+            matched.append((doc, meta, _id))
+    return matched
 
-    return matched_chunks
+def main():
+    args = sys.argv[1:]
+    if not args:
+        print("Usage: python3 retrieve_codebase.py <query> [n_results] [--naive]")
+        sys.exit(1)
+
+    # Parse arguments
+    query = args[0]
+    n_results = 3
+    naive_mode = False
+    if len(args) > 1:
+        # Check if second arg is numeric or '--naive'
+        if args[1].isdigit():
+            n_results = int(args[1])
+            if len(args) > 2 and args[2] == "--naive":
+                naive_mode = True
+        else:
+            if args[1] == "--naive":
+                naive_mode = True
+            else:
+                print("Unrecognized argument, ignoring or handle it differently.")
+    # If there's a third arg and it's '--naive', handle that too
+    if len(args) > 2 and args[2] == "--naive":
+        naive_mode = True
+
+    # Connect to Chroma
+    client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
+    collection = client.get_or_create_collection(name=COLLECTION_NAME)
+
+    if naive_mode:
+        # naive substring approach => get all docs, do substring search
+        all_docs = collection.get(limit=9999)
+        if not all_docs or "documents" not in all_docs or not all_docs["documents"]:
+            print(f"No docs found in '{COLLECTION_NAME}'.")
+            sys.exit(0)
+
+        results = naive_substring_search(all_docs, query)
+        if not results:
+            print(f"No matches found for substring: '{query}'")
+            sys.exit(0)
+
+        # Print top `n_results` results
+        results = results[:n_results]
+        print(f"\n🔹 Found {len(results)} matches for substring '{query}':\n")
+        for (doc_text, meta, doc_id) in results:
+            snippet = doc_text[:300] + ("..." if len(doc_text) > 300 else "")
+            print(f"Doc ID: {doc_id}")
+            print(f"Rel path: {meta.get('rel_path','??')}")
+            print(f"Chunk index: {meta.get('chunk_index','??')}")
+            print(f"Snippet: {snippet}")
+            print("-"*50)
+
+    else:
+        # embedding-based approach
+        matched = embedding_search(collection, query, n_results=n_results)
+        if not matched:
+            print(f"No semantic matches found for '{query}'")
+            sys.exit(0)
+
+        print(f"\n🔍 Found {len(matched)} semantic matches for: '{query}'\n")
+        for doc_text, meta, doc_id in matched:
+            snippet = doc_text[:400] + ("..." if len(doc_text) > 400 else "")
+            print(f"Doc ID: {doc_id}")
+            print(f"Filepath: {meta.get('filepath','??')}")
+            print(f"Rel path: {meta.get('rel_path','??')}")
+            print(f"Chunk #:  {meta.get('chunk_index','??')}")
+            print(f"Last mod: {meta.get('mod_time','??')}")
+            print()
+            print("Snippet Content (first 400 chars):")
+            print(snippet)
+            print("=================================================\n")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python3 retrieve_codebase.py <query> [n_results]")
-        sys.exit(1)
-
-    query_text = sys.argv[1]
-    n = 3
-    if len(sys.argv) > 2:
-        n = int(sys.argv[2])
-
-    snippets = retrieve_code_snippets(query_text, n_results=n)
-
-    print(f"\n🔍 Found {len(snippets)} relevant chunks for: '{query_text}'\n")
-    for i, (doc, meta) in enumerate(snippets, start=1):
-        filepath = meta.get("filepath", "??")
-        rel_path = meta.get("rel_path", "??")
-        chunk_idx = meta.get("chunk_index", "??")
-        mod_time = meta.get("mod_time", "??")
-        print(f"Result #{i}")
-        print("-------------------------------------------------")
-        print(f"Filepath: {filepath}")
-        print(f"Rel path: {rel_path}")
-        print(f"Chunk #:  {chunk_idx}")
-        print(f"Last mod: {mod_time}")
-        print()
-        print("Snippet Content (first 400 chars):")
-        print(doc[:400] + ("..." if len(doc) > 400 else ""))
-        print("=================================================\n")
+    main()

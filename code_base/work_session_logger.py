@@ -5,36 +5,32 @@ import traceback
 
 import chromadb
 
-# Import detect_api_url from your local network_utils.py
-# (Assuming network_utils.py is in the same directory or on the PYTHONPATH)
-from network_utils import detect_api_url
-
+from .network_utils import detect_api_url
 
 class WorkSessionLogger:
     """Handles AI work session logging, retrieval, and structured summaries."""
 
-    def __init__(self):
-        self.session_log_file = "../logs/work_session.md"
-        # Connect to your local ChromaDB
+    def __init__(self, test_mode=False):  # [CHANGED] add test_mode param
+        """
+        If test_mode=True, we write to 'tests/test_logs/work_session_test.md'
+        and use 'work_sessions_test' collection. Otherwise we do the production path.
+        """
+        if test_mode:
+            self.session_log_file = "tests/test_logs/work_session_test.md"  # [NEW]
+            collection_name = "work_sessions_test"                           # [NEW]
+        else:
+            self.session_log_file = "../logs/work_session.md"
+            collection_name = "work_sessions"
+
         self.chroma_client = chromadb.PersistentClient(
             path="/mnt/f/projects/ai-recall-system/chroma_db/"
         )
-        self.collection = self.chroma_client.get_or_create_collection(
-            name="work_sessions"
-        )
+        self.collection = self.chroma_client.get_or_create_collection(name=collection_name)
 
-        # Use detect_api_url from network_utils
         self.api_url = detect_api_url()
-        print(f"🔹 Using API URL: {self.api_url}")
+        print(f"🔹 Using API URL: {self.api_url}, test_mode={test_mode}")
 
-    def log_work_session(
-        self,
-        task,
-        files_changed=None,
-        error_details=None,
-        execution_time=None,
-        outcome=None
-    ):
+    def log_work_session(self, task, files_changed=None, error_details=None, execution_time=None, outcome=None):
         """Logs a structured work session entry."""
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -113,21 +109,15 @@ class WorkSessionLogger:
 
         return recent_logs
 
-
-# Example usage (if you run this script directly)
+# Example usage
 if __name__ == "__main__":
-    logger = WorkSessionLogger()
+    logger = WorkSessionLogger(test_mode=False)
 
-    # Mock AI task function
     def sample_ai_task():
-        """Simulate AI doing something."""
         time.sleep(1)
         return "AI completed task successfully."
 
-    # Demonstrate logging an AI execution
     logger.log_ai_execution(sample_ai_task)
-
-    # Demonstrate manual logging
     logger.log_work_session(
         task="Refactored AI work session logging",
         files_changed=["work_session_logger.py", "query_chroma.py"],
