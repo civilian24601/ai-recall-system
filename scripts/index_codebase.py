@@ -2,8 +2,8 @@
 """
 index_codebase.py 
 
- - Uses Python AST for .py files to chunk each function/class with docstrings.
- - For large functions/classes, we further chunk them line-based.
+ - Uses line-based chunking for all files, including .py (no AST for simplicity).
+ - For large chunks, we split line-based with overlap.
  - For non-Python files (JS, TS, MD, JSON, etc.), we do line-based chunking with line-range metadata.
    - Special handling for .md: smaller chunk size (100 lines) + 20-line overlap.
    - Markdowns in 'knowledge_base' folder get a 'guideline': True metadata flag.
@@ -41,12 +41,12 @@ COLLECTION_NAME = "project_codebase"
 
 CHUNK_SIZE_DEFAULT = 300    # lines, for most files
 CHUNK_SIZE_MD = 100         # smaller chunk size for markdown files
-CHUNK_OVERLAP_PY = 50       # only used when chunking large Python function bodies
+CHUNK_OVERLAP_PY = 50       # only used when chunking large Python files
 CHUNK_OVERLAP_MD = 20       # overlap for markdown files
 ALLOWED_EXTENSIONS = {".py", ".md", ".json", ".txt", ".yml", ".toml", ".js", ".ts"}
 SKIP_DIRS = {
     "chroma_db", ".git", "__pycache__", ".idea", "venv", ".pytest_cache", 
-    "node_modules", ".next", "dist"
+    "node_modules", ".next", "dist", "archive"
 }
 SKIP_FILES = {"codebase_inventory.md", "compiled_knowledge.md"}
 
@@ -88,22 +88,18 @@ def chunk_lines_with_range(lines, start_idx, chunk_size=300, overlap=0):
     return results
 
 ##############################################################################
-# PYTHON AST CHUNKING
+# PYTHON AST CHUNKING (Kept for reference, unused now)
 ##############################################################################
 
 class PyFunctionChunk:
-    """
-    Represents a function/method/class node with line info from AST.
-    """
     def __init__(self, name, start_line, end_line, node_type="function", parent_class=None):
         self.name = name
         self.start_line = start_line
         self.end_line = end_line
-        self.node_type = node_type  # "function", "method", "class", etc.
-        self.parent_class = parent_class  # if it's a method in a class
+        self.node_type = node_type
+        self.parent_class = parent_class
 
 def parse_python_ast(filepath):
-    """Parse the Python file with ast, return a list of PyFunctionChunk objects."""
     with open(filepath, "r", encoding="utf-8") as f:
         code = f.read()
     try:
@@ -137,7 +133,6 @@ def parse_python_ast(filepath):
             start_line = node.lineno
             end_line = getattr(node, "end_lineno", start_line)
             results.append(PyFunctionChunk(class_name, start_line, end_line, "class"))
-            # mark child methods
             for child in node.body:
                 if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     child._parent_class = class_name
@@ -147,11 +142,6 @@ def parse_python_ast(filepath):
     return results
 
 def build_python_chunks(lines, func_chunk):
-    """
-    For each PyFunctionChunk, we slice out lines from start_line-1..end_line
-    and if bigger than CHUNK_SIZE_DEFAULT, chunk it. Return a list of dicts with
-    "text", "start_line", "end_line", "function_name", "class_name", "node_type".
-    """
     start_idx = func_chunk.start_line - 1
     end_idx = func_chunk.end_line
     snippet_lines = lines[start_idx:end_idx]
@@ -161,7 +151,7 @@ def build_python_chunks(lines, func_chunk):
     for (chunk_text, real_start, real_end) in big_chunks:
         output.append({
             "text": chunk_text,
-            "start_line": real_start + 1,  # convert to 1-based
+            "start_line": real_start + 1,
             "end_line": real_end + 1,
             "function_name": func_chunk.name if func_chunk.node_type in ("function","method","async_function","async_method") else "",
             "class_name": func_chunk.parent_class if func_chunk.parent_class else (func_chunk.name if func_chunk.node_type=="class" else ""),
@@ -193,10 +183,10 @@ def reindex_single_file(filepath, collection, embed_model):
         return 0
 
     # Remove old doc_ids for this file
-    existing = collection.get(limit=9999)
-    if existing and "ids" in existing and existing["ids"]:
+    existing_results = collection.get(limit=9999)
+    if existing_results and "ids" in existing_results and existing_results["ids"]:
         matched_ids = []
-        for doc_id in existing["ids"]:
+        for doc_id in existing_results["ids"]:
             if doc_id.startswith(f"{filepath}::chunk_"):
                 matched_ids.append(doc_id)
         if matched_ids:
@@ -206,100 +196,40 @@ def reindex_single_file(filepath, collection, embed_model):
     lines = text.splitlines()
     new_chunks_for_file = 0
 
-    if ext == ".py":
-        func_chunks = parse_python_ast(filepath)
-        py_chunks = []
-        if not func_chunks:
-            # Fallback => line-based chunk
-            line_blocks = chunk_lines_with_range(lines, 0, chunk_size=CHUNK_SIZE_DEFAULT, overlap=0)
-            for chunk_text, st_line, end_line in line_blocks:
-                py_chunks.append({
-                    "text": chunk_text,
-                    "start_line": st_line+1,
-                    "end_line": end_line+1,
-                    "function_name": "",
-                    "class_name": "",
-                    "node_type": "misc"
-                })
-        else:
-            # Chunk each function/class
-            for fc in func_chunks:
-                sublist = build_python_chunks(lines, fc)
-                py_chunks.extend(sublist)
+    # Use line-based chunking for all files, including .py
+    chunk_size = CHUNK_SIZE_MD if ext == ".md" else CHUNK_SIZE_DEFAULT
+    overlap = CHUNK_OVERLAP_MD if ext == ".md" else CHUNK_OVERLAP_PY
+    line_blocks = chunk_lines_with_range(lines, 0, chunk_size=chunk_size, overlap=overlap)
+    for idx, (chunk_text, st_line, end_line) in enumerate(line_blocks):
+        if not chunk_text.strip():
+            continue
+        chunk_hash = compute_md5_hash(chunk_text)
+        doc_id = f"{filepath}::chunk_{idx}::hash_{chunk_hash}"
 
-        for idx, cdict in enumerate(py_chunks):
-            chunk_str = cdict["text"]
-            if not chunk_str.strip():
-                continue
-            chunk_hash = compute_md5_hash(chunk_str)
-            doc_id = f"{filepath}::chunk_{idx}::hash_{chunk_hash}"
+        embedding = embed_model.embed_documents([chunk_text])[0]
 
-            embedding = embed_model.embed_documents([chunk_str])[0]
+        meta = {
+            "filepath": filepath,
+            "rel_path": filepath,
+            "chunk_index": idx,
+            "hash": chunk_hash,
+            "mod_time": os.path.getmtime(filepath),
+            "start_line": int(st_line),
+            "end_line": int(end_line),
+            "function_name": "",
+            "class_name": "",
+            "node_type": "lines",
+            "guideline": True if (ext == ".md" and "knowledge_base" in filepath) else False,
+            "naive_only": True if ext != ".md" else False  # Naive-only for non-markdown non-Python
+        }
 
-            # Replace None with "" just in case
-            function_name = cdict.get("function_name", "") or ""
-            class_name = cdict.get("class_name", "") or ""
-            node_type = cdict.get("node_type", "") or ""
-            start_line = int(cdict.get("start_line", 0))
-            end_line = int(cdict.get("end_line", 0))
-
-            meta = {
-                "filepath": filepath,
-                "rel_path": filepath,
-                "chunk_index": idx,
-                "hash": chunk_hash,
-                "mod_time": os.path.getmtime(filepath),
-                "start_line": start_line,  # Fixed: Use start_line from cdict
-                "end_line": end_line,      # Fixed: Use end_line from cdict
-                "function_name": function_name,
-                "class_name": class_name,
-                "node_type": node_type
-            }
-
-            collection.add(
-                documents=[chunk_str],
-                embeddings=[embedding],
-                metadatas=[meta],
-                ids=[doc_id]
-            )
-            new_chunks_for_file += 1
-
-    else:
-        # Non-Python => line-based chunk with line-range
-        # Use smaller chunk size and overlap for .md files
-        chunk_size = CHUNK_SIZE_MD if ext == ".md" else CHUNK_SIZE_DEFAULT
-        overlap = CHUNK_OVERLAP_MD if ext == ".md" else 0
-        line_blocks = chunk_lines_with_range(lines, 0, chunk_size=chunk_size, overlap=overlap)
-        for idx, (chunk_text, st_line, end_line) in enumerate(line_blocks):
-            if not chunk_text.strip():
-                continue
-            chunk_hash = compute_md5_hash(chunk_text)
-            doc_id = f"{filepath}::chunk_{idx}::hash_{chunk_hash}"
-
-            embedding = embed_model.embed_documents([chunk_text])[0]
-
-            meta = {
-                "filepath": filepath,
-                "rel_path": filepath,
-                "chunk_index": idx,
-                "hash": chunk_hash,
-                "mod_time": os.path.getmtime(filepath),
-                "start_line": int(st_line),
-                "end_line": int(end_line),
-                "function_name": "",
-                "class_name": "",
-                "node_type": "lines",
-                "guideline": True if (ext == ".md" and "knowledge_base" in filepath) else False,
-                "naive_only": True if ext != ".md" else False  # Naive-only for non-markdown non-Python
-            }
-
-            collection.add(
-                documents=[chunk_text],
-                embeddings=[embedding],
-                metadatas=[meta],
-                ids=[doc_id]
-            )
-            new_chunks_for_file += 1
+        collection.add(
+            documents=[chunk_text],
+            embeddings=[embedding],
+            metadatas=[meta],
+            ids=[doc_id]
+        )
+        new_chunks_for_file += 1
 
     if new_chunks_for_file > 0:
         print(f"   ⮑ Re-indexed {new_chunks_for_file} chunk(s) from {filepath}")
@@ -371,14 +301,14 @@ class CodebaseEventHandler(FileSystemEventHandler):
 
     def remove_file_chunks(self, filepath):
         existing_results = self.collection.get(limit=9999)
-        if existing_results and "ids" in existing_results and existing_results["ids"]:
+        if existing_results and "ids" in existing_results and existing_results["ids"]:  # Fixed typo: 'existing' → 'existing_results'
             matched_ids = []
             for doc_id in existing_results["ids"]:
                 if doc_id.startswith(f"{filepath}::chunk_"):
                     matched_ids.append(doc_id)
             if matched_ids:
                 self.collection.delete(ids=matched_ids)
-                print(f"   🔸 Removed {len(matched_ids)} chunk(s) for deleted/renamed file: {filepath}")
+                print(f"   🔸 Removed {len(matched_ids)} old chunk(s) for deleted/renamed file: {filepath}")
 
     def _handle_change(self, filepath):
         with self._lock:
@@ -423,7 +353,7 @@ def watch_for_changes():
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="Index codebase + watchers + AST-based Python chunking.")
+    parser = argparse.ArgumentParser(description="Index codebase + watchers + line-based chunking.")
     parser.add_argument("--watch", action="store_true", help="Watch for file changes in real time.")
     args = parser.parse_args()
 

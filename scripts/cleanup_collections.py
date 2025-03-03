@@ -1,47 +1,35 @@
+# /scripts/cleanup_collections.py
+#!/usr/bin/env python3
+"""
+cleanup_collections.py
+
+Wipes all collections in ChromaDB to start fresh, excluding none.
+"""
+
 import chromadb
 
-# def delete_code_collections(chroma_path="/mnt/f/projects/ai-recall-system/chroma_db"):
-#     client = chromadb.PersistentClient(path=chroma_path)
-    
-#     # Print existing collections for reference
-#     collections = client.list_collections()
-#     print("🔎 Current collections in Chroma:")
-#     for c in collections:
-#         print(f" - {c}")
-
-#     # The ones you want to remove
-#     to_remove = {"project_codebase"}
-
-#     # Try to delete them if they exist
-#     for c in collections:
-#         if c in to_remove:
-#             try:
-#                 client.delete_collection(c)
-#                 print(f"✅ Deleted collection '{c}'")
-#             except Exception as e:
-#                 print(f"❌ Could not delete '{c}': {e}")
-
-#     # Re-list collections after deletion
-#     print("\n🔎 Collections after attempted deletion:")
-#     collections_after = client.list_collections()
-#     for c in collections_after:
-#         print(f" - {c}")
-
-# if __name__ == "__main__":
-#     delete_code_collections()
-
-
-def inspect_collections(chroma_path="/mnt/f/projects/ai-recall-system/chroma_db"):
+def wipe_all_collections(chroma_path="/mnt/f/projects/ai-recall-system/chroma_db"):
     client = chromadb.PersistentClient(path=chroma_path)
     
-    all_coll = client.list_collections()
-    for coll_name in all_coll:
-        coll = client.get_collection(coll_name)
-        # Query some stats. If you just call coll.get() with no filter, you can see how many docs we have.
-        data = coll.get()
-        doc_count = len(data["documents"])
-        print(f"Collection: {coll_name} => {doc_count} documents")
+    # Print existing collections for reference
+    collections = client.list_collections()
+    print("🔎 Current collections in Chroma before wiping:")
+    for c in collections:
+        print(f" - {c}")
+
+    # Delete all collections
+    for collection_name in collections:
+        try:
+            client.delete_collection(collection_name)
+            print(f"✅ Wiped collection '{collection_name}'")
+        except Exception as e:
+            print(f"❌ Could not wipe '{collection_name}': {e}")
+
+    # Re-list collections after wiping
+    print("\n🔎 Collections after wiping (should be empty):")
+    collections_after = client.list_collections()
+    for c in collections_after:
+        print(f" - {c}")
 
 if __name__ == "__main__":
-    inspect_collections()
-
+    wipe_all_collections()
