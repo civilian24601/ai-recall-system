@@ -1,19 +1,17 @@
 #!/usr/bin/env python3
 """
-index_codebase.py 
+index_project_structure.py 
 
- - Uses line-based chunking for code files (.py, .js, .tsx).
- - For large chunks, we split line-based with overlap.
- - No markdown or JSON files—those are handled by knowledge_base_test and debugging_logs collections.
- - We store 'start_line','end_line','function_name','class_name','node_type' in metadata, ensuring no None values.
- - Watchers with debouncing for partial saves, rename & delete handling.
- - Root directory covers /code_base, /scripts, /tests, /frontend (no node_modules, dist, etc.).
- 
+Indexes project_structure.json from /logs into a project_structure collection
+for RAG retrieval, using line-based chunking for large files.
+
 Usage:
-    python index_codebase.py
+    python index_project_structure.py
         (one-shot indexing)
-    python index_codebase.py --watch
+    python index_project_structure.py --watch
         (start watchers in real-time)
+    python index_project_structure.py --test
+        (use project_structure_test for testing)
 """
 
 import os
@@ -21,6 +19,7 @@ import sys
 import time
 import hashlib
 import threading
+import argparse
 
 import chromadb
 from langchain_huggingface.embeddings import HuggingFaceEmbeddings
@@ -34,21 +33,18 @@ from watchdog.events import FileSystemEventHandler
 ##############################################################################
 
 CHROMA_DB_PATH = "/mnt/f/projects/ai-recall-system/chroma_db"
-COLLECTION_NAME = "project_codebase"
+COLLECTION_NAME_BASE = "project_structure"
 
-CHUNK_SIZE_DEFAULT = 300    # lines, for all code files
-CHUNK_OVERLAP = 50         # overlap for all code files
-ALLOWED_EXTENSIONS = {".py", ".js", ".tsx"}  # Only code files, no markdown or JSON
+CHUNK_SIZE_DEFAULT = 300    # lines, for project structure
+CHUNK_OVERLAP = 50         # overlap for project structure
+ALLOWED_EXTENSIONS = {".json"}  # Only project structure JSON
 SKIP_DIRS = {
     "chroma_db", ".git", "__pycache__", ".idea", "venv", ".pytest_cache", 
-    "node_modules", ".next", "dist", "archive", "knowledge_base", "agent_knowledge_bases", "logs"
+    "node_modules", ".next", "dist", "archive", "knowledge_base", "agent_knowledge_bases", "code_base", "scripts", "tests", "frontend", "debugging_logs"
 }
-SKIP_FILES = {"codebase_inventory.md", "compiled_knowledge.md"}  # Keep these skipped
+SKIP_FILES = {"compiled_project_structure.md", "debug_logs.json", "debug_logs_test.json", "debugging_strategies.json", "work_session.md"}  # Keep these skipped
 
-ROOT_DIRS = ["/mnt/f/projects/ai-recall-system/code_base", 
-             "/mnt/f/projects/ai-recall-system/scripts", 
-             "/mnt/f/projects/ai-recall-system/tests", 
-             "/mnt/f/projects/ai-recall-system/frontend"]  # Focus on code directories
+ROOT_DIRS = ["/mnt/f/projects/ai-recall-system/logs"]  # Focus on project structure
 DEBOUNCE_SECONDS = 2.0
 
 ##############################################################################
@@ -119,7 +115,7 @@ def reindex_single_file(filepath, collection, embed_model):
     lines = text.splitlines()
     new_chunks_for_file = 0
 
-    # Use line-based chunking for all code files
+    # Use line-based chunking for project structure
     chunk_size = CHUNK_SIZE_DEFAULT
     overlap = CHUNK_OVERLAP
     line_blocks = chunk_lines_with_range(lines, 0, chunk_size=chunk_size, overlap=overlap)
@@ -139,9 +135,7 @@ def reindex_single_file(filepath, collection, embed_model):
             "mod_time": os.path.getmtime(filepath),
             "start_line": int(st_line),
             "end_line": int(end_line),
-            "function_name": "",  # Empty for now, as we’re not using AST
-            "class_name": "",     # Empty for now, as we’re not using AST
-            "node_type": "lines"  # Generic for all code files
+            "structure_type": "project"  # Generic for project structure
         }
 
         collection.add(
@@ -161,10 +155,11 @@ def reindex_single_file(filepath, collection, embed_model):
 # One-shot indexing
 ##############################################################################
 
-def index_codebase():
-    print(f"🔗 Connecting to Chroma at '{CHROMA_DB_PATH}' ...")
+def index_project_structure(test_mode=False):
+    collection_name = f"{COLLECTION_NAME_BASE}_test" if test_mode else COLLECTION_NAME_BASE
+    print(f"🔗 Connecting to Chroma at '{CHROMA_DB_PATH}' for {collection_name} ...")
     client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
-    collection = client.get_or_create_collection(name=COLLECTION_NAME)
+    collection = client.get_or_create_collection(name=collection_name)
     embed_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
     total_files = 0
@@ -191,7 +186,7 @@ def index_codebase():
 # Watchers
 ##############################################################################
 
-class CodebaseEventHandler(FileSystemEventHandler):
+class ProjectStructureEventHandler(FileSystemEventHandler):
     def __init__(self, collection, embed_model):
         super().__init__()
         self.collection = collection
@@ -222,7 +217,7 @@ class CodebaseEventHandler(FileSystemEventHandler):
 
     def remove_file_chunks(self, filepath):
         existing_results = self.collection.get(limit=9999)
-        if existing_results and "ids" in existing_results and existing_results["ids"]:  # Fixed typo here too
+        if existing_results and "ids" in existing_results and existing_results["ids"]:
             matched_ids = []
             for doc_id in existing_results["ids"]:
                 if doc_id.startswith(f"{filepath}::chunk_"):
@@ -250,13 +245,14 @@ class CodebaseEventHandler(FileSystemEventHandler):
         print(f"\n🔄 Debounced re-index for file: {filepath}")
         reindex_single_file(filepath, self.collection, self.embed_model)
 
-def watch_for_changes():
-    print(f"🔗 Connecting to Chroma at '{CHROMA_DB_PATH}' for watchers...")
+def watch_for_changes(test_mode=False):
+    collection_name = f"{COLLECTION_NAME_BASE}_test" if test_mode else COLLECTION_NAME_BASE
+    print(f"🔗 Connecting to Chroma at '{CHROMA_DB_PATH}' for watchers on {collection_name}...")
     client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
-    collection = client.get_or_create_collection(name=COLLECTION_NAME)
+    collection = client.get_or_create_collection(name=collection_name)
     embed_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
-    event_handler = CodebaseEventHandler(collection, embed_model)
+    event_handler = ProjectStructureEventHandler(collection, embed_model)
     observer = watchdog.observers.Observer()
 
     for root_dir in ROOT_DIRS:
@@ -273,12 +269,12 @@ def watch_for_changes():
     observer.join()
 
 if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser(description="Index codebase + watchers + line-based chunking for code files only.")
+    parser = argparse.ArgumentParser(description="Index project structure + watchers + line-based chunking for project structure JSON only.")
     parser.add_argument("--watch", action="store_true", help="Watch for file changes in real time.")
+    parser.add_argument("--test", action="store_true", help="Use project_structure_test for testing.")
     args = parser.parse_args()
 
     if args.watch:
-        watch_for_changes()
+        watch_for_changes(test_mode=args.test)
     else:
-        index_codebase()
+        index_project_structure(test_mode=args.test)

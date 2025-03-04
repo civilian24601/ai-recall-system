@@ -50,7 +50,7 @@ def test_embedding_search(codebase_test_coll):
     for a semantically-related phrase. We'll expect 1 match.
     """
     # We'll embed the doc
-    from langchain_community.embeddings import HuggingFaceEmbeddings
+    from langchain_huggingface.embeddings import HuggingFaceEmbeddings
     emb = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
     
     doc_text = "We handle a ZeroDivisionError in this code chunk."

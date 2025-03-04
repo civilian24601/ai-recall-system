@@ -6,7 +6,7 @@ def store_markdown_in_chroma():
     chroma_client = chromadb.PersistentClient(path="chroma_db/")
     collection = chroma_client.get_or_create_collection("markdown_logs")
 
-    log_dirs = ["logs/", "knowledge_base/"]
+    log_dirs = ["../knowledge_base/"]
     for log_dir in log_dirs:
         for filename in os.listdir(log_dir):
             if filename.endswith(".md"):

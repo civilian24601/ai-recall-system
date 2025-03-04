@@ -201,7 +201,7 @@ def authenticate_user(user_data):
                 logging.info(f"Filtered context for {error_id} (guidelines + Python, max 1000 chars): {context}...")  # Log full context
 
                 task_prompt = (
-                    f"Please debug the following script and return ONLY the COMPLETE fixed function in Python using a FULL try/except block with the appropriate except clause to handle the error ({error}), returning None, with NO extra logic, NO prose, and NO explanations, inside ```python ... ```."
+                    f"Please debug the following script and return ONLY the COMPLETE fixed function in Python using a FULL try/except block with the appropriate except clause to handle the error ({error}), returning None, with NO extra logic, NO prose, and NO explanations, inside ```python\n{script_content}\n```."
                 )
                 fix = self.agent_manager.delegate_task("engineer", task_prompt, timeout=300)
                 
@@ -210,7 +210,7 @@ def authenticate_user(user_data):
                         logging.warning(f"No valid fix for {error_id} after {attempt_count} attempts. Retrying manually...")
                         fix = self.agent_manager.delegate_task(
                             "engineer",
-                            f"Please debug the following script and return ONLY the COMPLETE fixed function in Python using a FULL try/except block with the appropriate except clause to handle the error ({error}), returning None, with NO extra logic, NO prose, and NO explanations, inside ```python ... ```.",
+                            f"Please debug the following script and return ONLY the COMPLETE fixed function in Python using a FULL try/except block with the appropriate except clause to handle the error ({error}), returning None, with NO extra logic, NO prose, and NO explanations, inside ```python\n{script_content}\n```.",
                             timeout=360
                         )
                     else:
