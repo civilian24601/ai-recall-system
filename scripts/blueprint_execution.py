@@ -10,7 +10,6 @@ import os
 import datetime
 import json
 import traceback
-import subprocess
 import time
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -21,7 +20,7 @@ from code_base.agent_manager import AgentManager
 
 class BlueprintExecution:
     def __init__(self, agent_manager=None, test_mode=False, collections=None):
-        self.agent_manager = agent_manager
+        self.agent_manager = agent_manager or AgentManager()  # Default to new instance if None
         self.test_mode = test_mode
         self.collections = collections  # Use passed collections
         
@@ -50,13 +49,15 @@ class BlueprintExecution:
         
         start_time = time.time()
         try:
-            result = subprocess.run(
-                ["python3", script_path],
-                capture_output=True, text=True, timeout=60
+            # Use delegate_task instead of execute_task
+            task_result = self.agent_manager.delegate_task(
+                "engineer",
+                f"Execute task '{task_name}' on script {script_path} with context: {execution_context}",
+                timeout=300
             )
             execution_time = time.time() - start_time
-            errors = result.stderr if result.stderr else "None"
-            success = result.returncode == 0
+            errors = "None" if task_result and "def placeholder" not in task_result else "Task execution failed"
+            success = task_result and "def placeholder" not in task_result
             efficiency_score = int(100 - (execution_time * 10)) if success else 20
             
             execution_trace_id = self.log_execution(
@@ -78,12 +79,13 @@ class BlueprintExecution:
             return execution_trace_id
         except Exception as e:
             print(f"⚠️ Blueprint execution failed: {e}")
+            execution_time = time.time() - start_time
             return self.log_execution(
                 blueprint_id=blueprint_id,
                 task_name=task_name,
                 execution_context=execution_context,
                 expected_outcome="Task completed successfully",
-                execution_time=time.time() - start_time,
+                execution_time=execution_time,
                 files_changed=[script_path],
                 dependencies=[],
                 pipeline_connections=["agent.py"],
@@ -209,4 +211,11 @@ class BlueprintExecution:
         return revision_id
 
 if __name__ == "__main__":
-    raise NotImplementedError("Run via agent.py—requires collections arg")
+    CHROMA_DB_PATH = "/mnt/f/projects/ai-recall-system/chroma_db"
+    collections = {
+        "execution_logs": chromadb.PersistentClient(path=CHROMA_DB_PATH).get_or_create_collection("execution_logs"),
+        "blueprint_versions": chromadb.PersistentClient(path=CHROMA_DB_PATH).get_or_create_collection("blueprint_versions"),
+        "blueprint_revisions": chromadb.PersistentClient(path=CHROMA_DB_PATH).get_or_create_collection("blueprint_revisions")
+    }
+    executor = BlueprintExecution(collections=collections)
+    executor.run_blueprint("bp_001", "Query error handling", "/mnt/f/projects/ai-recall-system/scripts/retrieve_codebase.py", "Enhance AI debugging recall")
