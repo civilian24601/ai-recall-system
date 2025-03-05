@@ -1,135 +1,137 @@
 # 🏗️ Core Architecture - AI Recall System
 
-## **📌 Overview**
+## 📌 Overview
 
-The AI Recall System is a **self-improving AI-powered development assistant** that evolves from **manual AI-assisted recall to fully autonomous debugging and execution workflows.**  
+The AI Recall System is a **self-improving AI-powered development assistant** evolving from **manual AI-assisted recall to fully autonomous debugging and execution workflows**. It’s built to be a local, solopreneur-driven kernel—scalable, cost-free, and custom—rooted in a persistent memory backbone.
 
-✅ **Primary Capabilities:**  
+✅ **Primary Capabilities**:  
 
-- **AI Knowledge Recall** → AI retrieves past work, debugging logs, and solutions from ChromaDB.  
-- **Self-Debugging & Execution** → AI detects errors, retrieves past fixes, and applies solutions automatically.  
-- **Autonomous Code Generation** → AI iterates on code improvements with minimal human input.  
-- **Multi-Agent Collaboration (Future)** → AI teams work together to optimize and execute development workflows.  
+- **AI Knowledge Recall**: Retrieves past work, debugging logs, and solutions from ChromaDB.  
+- **Self-Debugging & Execution**: Detects errors, fetches fixes, and applies them autonomously.  
+- **Autonomous Code Generation**: Iterates on code improvements with minimal human input.  
+- **Multi-Agent Collaboration (Future)**: Teams of AI agents optimize and execute workflows.  
 
-🚀 **Current Status:** **Single-Agent Mode (AI Recall & Debugging) in Progress**  
-📌 **Next Step:** AI **automates self-debugging before expanding into Multi-Agent workflows.**  
+🚀 **Current Status (03/04/2025)**: Single-Agent Mode in progress—indexing complete, agents next.  
+📌 **Next Step**: Automate self-debugging, expand to multi-agent workflows.
 
 ---
 
-## **📌 System Components**
+## 📌 System Components
 
 | **Component** | **Purpose** |
-|--------------|------------|
-| **Flask API (`api_structure.py`)** | Routes AI queries, model execution, and debugging requests. |
-| **LM Studio (Local Models)** | Executes AI-generated prompts & suggestions. |
-| **ChromaDB (`chroma_db/`)** | Stores vector embeddings of past AI work for retrieval. |
-| **Continue.dev (VS Code AI Assistant)** | Enhances real-time AI-powered development. |
-| **CLI Commands (`ai-recall`, `ai-debug`)** | Enables manual AI-assisted debugging and recall. |
-| **Knowledge Base (`knowledge_base/`)** | Stores documentation, architecture notes, and debugging history. |
+|---------------|-------------|
+| **Flask API (`api_structure.py`)** | Routes AI queries, model execution, and debugging requests (TBD). |
+| **LM Studio (Local Models)** | Executes AI-generated prompts & suggestions (planned integration). |
+| **ChromaDB (`chroma_db/`)** | Stores vector embeddings of past work—110 chunks in `project_codebase`, 266 in `knowledge_base`. |
+| **Continue.dev (VS Code AI Assistant)** | Enhances real-time AI-powered development (optional tool). |
+| **CLI Commands (`ai-recall`, `ai-debug`)** | Manual recall/debugging—evolving to agent-driven (TBD). |
+| **Knowledge Base (`knowledge_base/`)** | Docs, architecture notes, history—25 files, 266 chunks indexed. |
 
-✅ **AI is trained to self-query these components to solve problems autonomously.**  
+✅ **Current Setup**:  
 
----
-
-## **📌 Single-Agent Mode (Current State)**
-
-📌 **The system currently operates in Single-Agent Mode, where:**  
-✅ AI **retrieves past debugging logs, work summaries, and stored solutions.**  
-✅ AI **assists in debugging but requires human execution of fixes.**  
-✅ AI **does not yet refactor or apply fixes automatically.**  
-
-🔹 **Current Workflow:**  
-1️⃣ **User asks AI a recall question via CLI or Continue.dev.**  
-2️⃣ AI **queries ChromaDB for relevant past work.**  
-3️⃣ AI **suggests a solution based on prior debugging logs.**  
-4️⃣ **User applies the fix manually and updates the knowledge base.**  
-
-✅ **Knowledge is stored and retrieved, but AI execution is still manual.**  
+- **ChromaDB**: Persistent at `/mnt/f/projects/ai-recall-system/chroma_db/`, using `sentence-transformers/all-MiniLM-L6-v2`.  
+- **Indexing**: `index_codebase.py` (line-based, 300 lines, 50 overlap), `index_knowledgebase.py` (header-based, ~500 chars).  
+- **Logging**: `/logs/script_logs/<script>.log` (e.g., `index_codebase.log`) with `INFO`, `WARNING`, `ERROR`.
 
 ---
 
-## **📌 Multi-Agent Mode (Future Expansion)**
+## 📌 Single-Agent Mode (Current State)
 
-📌 **The AI Recall System is designed to scale into a Multi-Agent Framework.**  
-🚀 **Goal:** AI will transition from **passive recall to active self-debugging, execution, and optimization.**  
+📌 **Current Operation**:  
+✅ AI retrieves past debugging logs, work summaries, and solutions from ChromaDB.  
+✅ Assists debugging but requires human execution of fixes.  
+✅ Does not yet refactor or apply fixes automatically.  
 
-### **🔹 Planned AI Agents**
+🔹 **Workflow**:  
+1️⃣ User asks AI a recall question via CLI (`retrieve_codebase.py`) or VS Code.  
+2️⃣ AI queries ChromaDB (`project_codebase`: 110 chunks, `knowledge_base`: 266 chunks).  
+3️⃣ AI suggests solutions based on indexed logs/docs.  
+4️⃣ User applies fixes manually, updates knowledge base via commits.  
+
+✅ **Stats (03/04/2025)**:  
+
+- **Code**: 105 files indexed, 110 chunks—`.py`, `.js`, `.tsx` from `/code_base/`, `/scripts/`, `/tests/`, `/frontend/`.  
+- **Docs**: 25 `.md` files, 266 chunks from `/knowledge_base/` and `/agent_knowledge_bases/`.  
+- **Logging**: Timestamped in `/logs/script_logs/`—e.g., “Processed 105 files, 110 chunks”.
+
+---
+
+## 📌 Multi-Agent Mode (Future Expansion)
+
+📌 **Vision**: Scale to a multi-agent framework where AI transitions from passive recall to active execution and optimization.  
+
+### 🔹 Planned AI Agents
 
 | **Agent** | **Role** |
-|-----------|---------|
-| **Engineer Agent** | Writes, refactors, and improves AI-generated code. |
-| **QA Agent** | Tests AI modifications for accuracy and consistency. |
-| **Debug Agent** | Detects errors, retrieves past solutions, and applies fixes. |
-| **Oversight Agent** | Monitors AI behavior, prevents errors, and manages ChromaDB. |
-| **DevOps Agent** | Handles system monitoring, scaling, and infrastructure tasks. |
+|-----------|----------|
+| **Engineer Agent** | Writes, refactors, and improves code—queries `project_codebase`. |
+| **QA Agent** | Tests modifications for accuracy—validates against `knowledge_base`. |
+| **Debug Agent** | Detects errors, retrieves fixes, applies them—logs to `execution_logs`. |
+| **Oversight Agent** | Monitors behavior, prevents errors, manages ChromaDB consistency. |
+| **DevOps Agent** | Handles scaling, infrastructure—syncs to `global_knowledge_base`. |
 
-✅ **Final goal:** AI becomes a **self-improving autonomous development system.**  
-
----
-
-## **📌 AI Self-Debugging & Knowledge Storage**
-
-📌 **AI will transition from manual debugging assistance to autonomous execution.**  
-
-### **🔹 Current Debugging Process**
-
-1️⃣ AI **logs debugging issues in `debug_logs.json`.**  
-2️⃣ AI **retrieves past fixes from ChromaDB when prompted.**  
-3️⃣ AI **suggests a solution, but the developer applies the fix manually.**  
-
-### **🔹 Future Self-Debugging**
-
-✅ AI **detects errors and queries past debugging solutions automatically.**  
-✅ AI **applies the fix without human intervention (after verification).**  
-✅ AI **evaluates success & logs whether the solution worked.**  
-
-🚀 **Goal:** AI **closes its own debugging loops**, reducing human intervention.  
+✅ **Goal**: A self-improving system—agents collaborate via blueprints (e.g., `/blueprints/agent_blueprint_v1.json`).
 
 ---
 
-## **📌 AI Knowledge Flow (ChromaDB-Powered Recall)**
+## 📌 AI Self-Debugging & Knowledge Storage
 
-📌 **ChromaDB serves as AI’s persistent long-term memory.**  
-✅ AI **automatically updates ChromaDB with debugging logs, past work, and solutions.**  
-✅ AI **queries stored knowledge before generating new solutions.**  
-✅ AI **retrieves project-specific knowledge to ensure contextual accuracy.**  
+📌 **Transition**: From manual assistance to autonomous execution.  
 
-### **🔹 Knowledge Retrieval Workflow**
+### 🔹 Current Debugging Process
 
-1️⃣ AI **searches ChromaDB before attempting to generate a solution.**  
-2️⃣ AI **retrieves past work relevant to the current problem.**  
-3️⃣ AI **compares stored solutions and ranks their effectiveness.**  
-4️⃣ AI **selects the best prior fix and applies or modifies it as needed.** 
-4️⃣ AI **if no prior fix is available, AI generates and tests new solution, logging the results**  
+1️⃣ AI logs issues manually via user commits—no `debug_logs.json` yet.  
+2️⃣ AI retrieves fixes from ChromaDB when prompted (e.g., `retrieve_codebase.py "error handling"`).  
+3️⃣ AI suggests solutions—user applies them.  
 
-🚀 **Goal:** **AI should not first "reinvent the wheel"—it should recall and apply past solutions intelligently. If past solutions are inadequate or nonexistent, AI then flexes its agency and generates solutions to test and if successful and safe, implement.**  
+### 🔹 Future Self-Debugging
 
----
+✅ AI detects errors in real-time (watchers in `index_codebase.py`).  
+✅ Queries past solutions from `debugging_logs` (TBD collection).  
+✅ Applies fixes post-verification by QA agent, logs outcomes to `execution_logs`.  
 
-🚀 **Future Goal:** AI will **self-query and apply fixes automatically without human input.**  
+🚀 **Goal**: Closed-loop debugging—minimal human input.
 
 ---
 
-## **📌 Future Goals & Milestones**
+## 📌 AI Knowledge Flow (ChromaDB-Powered Recall)
+
+📌 **ChromaDB**: AI’s long-term memory—persistent, scalable.  
+✅ Updates with every run (`index_*.py`), queried before new solutions.  
+✅ Stores project-specific context—code, docs, logs.  
+
+### 🔹 Knowledge Retrieval Workflow
+
+1️⃣ AI searches ChromaDB before generating fixes—e.g., 110 code chunks, 266 doc chunks.  
+2️⃣ Retrieves relevant past work (e.g., `agent.py` chunk with try/except).  
+3️⃣ Ranks solutions by relevance—uses embeddings (`all-MiniLM-L6-v2`).  
+4️⃣ Applies best fix or generates/tests new one if none exist.  
+5️⃣ Logs results to Chroma—e.g., `execution_logs` (TBD).
+
+🚀 **Goal**: Avoid reinventing the wheel—recall first, innovate second.
+
+---
+
+## 📌 Future Goals & Milestones
 
 | **Phase** | **Goal** | **AI Capability** |
-|----------|--------|------------------|
-| **Phase 1: AI Recall & Debugging** | ✅ Store & retrieve past work. | **Passive recall only.** |
-| **Phase 2: AI Self-Debugging** | ✅ AI applies past fixes automatically. | **Self-executing error resolution.** |
-| **Phase 3: AI Self-Refactoring** | ✅ AI modifies & improves its own code. | **Autonomous optimization.** |
-| **Phase 4: Fully Autonomous AI** | ✅ AI executes complete projects. | **Human oversight only.** |
+|-----------|----------|-------------------|
+| **Phase 1: AI Recall & Debugging** | ✅ Store & retrieve past work—110 + 266 chunks indexed. | Passive recall only. |
+| **Phase 2: AI Self-Debugging** | ✅ Apply past fixes automatically. | Self-executing resolution. |
+| **Phase 3: AI Self-Refactoring** | ✅ Modify & improve code autonomously. | Optimization loops. |
+| **Phase 4: Fully Autonomous AI** | ✅ Execute full projects. | Human oversight only. |
 
-🚀 **The final goal:** AI **becomes an autonomous self-improving development assistant.**  
+🚀 **Endgame**: An autonomous, self-improving dev assistant—local, relentless, yours.
 
 ---
 
-## **📌 Summary**
+## 📌 Summary
 
-📌 **This document ensures a structured understanding of:**  
-✅ **Current Single-Agent AI Recall Workflows**  
-✅ **Planned Multi-Agent Expansion**  
-✅ **ChromaDB-Powered AI Knowledge Storage & Retrieval**  
-✅ **Future AI Debugging & Autonomous Execution**  
+📌 **This covers**:  
+✅ Current single-agent recall (110 code, 266 doc chunks).  
+✅ Planned multi-agent expansion—engineer, QA, debug roles.  
+✅ ChromaDB memory—`/chroma_db/`, logging in `/logs/script_logs/`.  
+✅ Future autonomy—self-debugging to full execution.  
 
-📅 **Last Updated:** *February 2025*  
-🔹 **Maintained by AI Recall System**  
+📅 **Last Updated**: March 4, 2025  
+🔹 **Maintained by**: AI Recall System Team

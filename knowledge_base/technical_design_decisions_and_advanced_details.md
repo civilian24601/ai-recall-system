@@ -20,9 +20,7 @@ High-Speed: Lightweight enough to keep local inference fast, especially for sing
 2.3 API Connectivity Handling
 To ensure the AI model is always reachable, we detect whether we’re in WSL or native Windows:
 
-python
-Copy
-Edit
+
 def detect_api_url():
     wsl_ip = "172.17.128.1"
     default_url = "http://localhost:1234/v1/chat/completions"
@@ -43,7 +41,7 @@ Updated Note—Consolidating:
 
 We now keep this in network_utils.py to avoid duplicating the same function in agent_manager.py, api_structure.py, etc.
 We can either call LM Studio directly or go via a Flask endpoint—both approaches exist in the codebase, letting you choose whichever workflow is more convenient.
-3. Model Selection & Usage
+1. Model Selection & Usage
 3.1 Refining Model Selection
 Our system typically uses three categories of models:
 
@@ -70,47 +68,46 @@ Knowledge Storage:
 AI logs debugging attempts, solutions, and execution history in JSON.
 Embeds structured knowledge into ChromaDB for semantic recall.
 Retrieves solutions before generating new code or debugging suggestions.
-python
-Copy
-Edit
+
 def store_ai_knowledge(entry: dict):
     """
     Stores AI debugging logs into ChromaDB.
     """
     # ...
     # ensures no repeated wheel reinvention
+
 4.2 AI Debugging & Self-Improvement Pipeline
 Error Detection: AI or the system notices an error in code.
 Recall: Queries ChromaDB for relevant past logs/fixes.
 Fix Application: AI suggests or automatically applies the fix.
 Outcome Logging: Logs success or failure, which informs future suggestions.
-python
-Copy
-Edit
+
 def ai_debugging_pipeline(error_message: str):
     past_fixes = retrieve_debugging_logs(error_message)
     if past_fixes:
         apply_fix(past_fixes[0])
+
 4.3 AI Self-Refactoring & Code Optimization
+
 Redundant Logic: AI identifies inefficiencies by comparing code structure and performance.
 Fetch Past Optimizations: Queries previously stored “optimized code” patterns in ChromaDB.
 Suggest or Apply: AI attempts refactoring, logs the new approach, and measures improvements.
-python
-Copy
-Edit
+
 def optimize_code_structure(current_code: str) -> str:
     refactored_code = retrieve_past_optimized_code(current_code)
     return refactored_code or current_code
+
 4.4 AI Execution & Oversight Agent
+
 Execution Approval: If the AI is about to make a major refactor, a risk assessment step checks a “confidence_score.”
+
 Rollback Mechanism: The system keeps old versions to revert if a fix fails.
 Oversight: A specialized agent or layer ensures no dangerous or irreversible changes go live without approval.
-python
-Copy
-Edit
+
 def ai_execution_oversight(code_modification: str) -> bool:
     confidence_score = assess_code_change_risk(code_modification)
     return confidence_score > 90
+
 4.5 Single-Agent to Multi-Agent Transition
 Engineer Agent: Writes & refactors code
 QA Agent: Tests modifications, ensures debugging recall accuracy
@@ -122,9 +119,7 @@ Goal: These specialized agents coordinate to manage software development with mi
 Solution Effectiveness: The AI logs fix outcomes to refine retrieval ranking.
 New Solutions: If past fixes fail, AI tries alternative strategies or preprompt expansions.
 Example AI Learning Log Entry:
-json
-Copy
-Edit
+
 {
   "timestamp": "2025-02-11 10:05:42",
   "query": "Fix last API failure",
@@ -134,7 +129,7 @@ Edit
 }
 Over time, retrieval success and self-validation drive a continuous improvement cycle.
 
-5. Additional Notes & Updated Sections
+1. Additional Notes & Updated Sections
 5.1 Consolidation of LM Studio URL Detection
 Previously, agent_manager.py and api_structure.py each had their own detect_api_url method. We’ve moved this logic into a shared network_utils.py to:
 
@@ -145,6 +140,7 @@ Simplify future changes if we switch local/remote endpoints
 Direct-to-LM-Studio: E.g., agent_manager.py calls LM Studio directly for faster requests.
 Flask-based: api_structure.py is simpler for manual QA or external clients.
 The design allows devs to pick whichever suits their workflow without major refactoring.
+
 6. Summary
 This document combines:
 
