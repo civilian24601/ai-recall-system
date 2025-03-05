@@ -166,4 +166,5 @@ if __name__ == "__main__":
                     if index_markdown_file(markdown_path):
                         total_indexed += 1
 
-    logger.info(f"✅ index_knowledgebase.py completed indexing successfully in test mode with {total_indexed} files.")
+    # Modified: Log totals explicitly, point to inspect_collections.py, no console output
+    logger.info(f"✅ Completed indexing with {total_indexed} files, chunk totals in 'inspect_collections.py'")
