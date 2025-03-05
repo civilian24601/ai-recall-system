@@ -21,8 +21,7 @@ import chromadb
 from langchain_huggingface import HuggingFaceEmbeddings
 
 CHROMA_DB_PATH = "/mnt/f/projects/ai-recall-system/chroma_db"
-COLLECTION_NAME = "project_codebase"
-
+COLLECTION_NAME = "project_codebase"  # Collection name in ChromaDB
 
 def naive_substring_search(docs, query):
     """
@@ -64,7 +63,6 @@ def main():
     n_results = 3
     naive_mode = False
     if len(args) > 1:
-        # Check if second arg is numeric or '--naive'
         if args[1].isdigit():
             n_results = int(args[1])
             if len(args) > 2 and args[2] == "--naive":
@@ -74,7 +72,6 @@ def main():
                 naive_mode = True
             else:
                 print("Unrecognized argument, ignoring or handle it differently.")
-    # If there's a third arg and it's '--naive', handle that too
     if len(args) > 2 and args[2] == "--naive":
         naive_mode = True
 
@@ -83,7 +80,7 @@ def main():
     collection = client.get_or_create_collection(name=COLLECTION_NAME)
 
     if naive_mode:
-        # naive substring approach => get all docs, do substring search
+        # Naive substring approach => get all docs, do substring search
         all_docs = collection.get(limit=9999)
         if not all_docs or "documents" not in all_docs or not all_docs["documents"]:
             print(f"No docs found in '{COLLECTION_NAME}'.")
@@ -100,13 +97,13 @@ def main():
         for (doc_text, meta, doc_id) in results:
             snippet = doc_text[:300] + ("..." if len(doc_text) > 300 else "")
             print(f"Doc ID: {doc_id}")
-            print(f"Rel path: {meta.get('rel_path','??')}")
-            print(f"Chunk index: {meta.get('chunk_index','??')}")
+            print(f"Rel path: {meta.get('rel_path', meta.get('filename', '??'))}")  # Fallback to filename
+            print(f"Chunk index: {meta.get('chunk_index', '??')}")
             print(f"Snippet: {snippet}")
             print("-"*50)
 
     else:
-        # embedding-based approach
+        # Embedding-based approach
         matched = embedding_search(collection, query, n_results=n_results)
         if not matched:
             print(f"No semantic matches found for '{query}'")
@@ -115,16 +112,20 @@ def main():
         print(f"\n🔍 Found {len(matched)} semantic matches for: '{query}'\n")
         for doc_text, meta, doc_id in matched:
             snippet = doc_text[:400] + ("..." if len(doc_text) > 400 else "")
+            # Adjusted to handle both project_codebase and knowledge_base metadata
+            filepath = meta.get('filepath', meta.get('filename', '??'))  # Fallback to filename
+            rel_path = meta.get('rel_path', meta.get('filename', '??'))  # Fallback to filename
+            chunk_num = meta.get('chunk_index', meta.get('chunk', '??'))  # Fallback to chunk
+            last_mod = meta.get('mod_time', meta.get('mtime', '??'))     # Fallback to mtime
             print(f"Doc ID: {doc_id}")
-            print(f"Filepath: {meta.get('filepath','??')}")
-            print(f"Rel path: {meta.get('rel_path','??')}")
-            print(f"Chunk #:  {meta.get('chunk_index','??')}")
-            print(f"Last mod: {meta.get('mod_time','??')}")
+            print(f"Filepath: {filepath}")
+            print(f"Rel path: {rel_path}")
+            print(f"Chunk #:  {chunk_num}")
+            print(f"Last mod: {last_mod}")
             print()
             print("Snippet Content (first 400 chars):")
             print(snippet)
             print("=================================================\n")
-
 
 if __name__ == "__main__":
     main()
