@@ -11,6 +11,7 @@ import datetime
 import json
 import traceback
 import time
+import chromadb
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PARENT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
