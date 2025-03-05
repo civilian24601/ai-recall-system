@@ -15,8 +15,14 @@ from pathlib import Path
 from langchain_huggingface.embeddings import HuggingFaceEmbeddings
 import chromadb
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# Configure logging to file
+LOG_FILE = "/mnt/f/projects/ai-recall-system/logs/script_logs/index_knowledgebase.log"
+logging.basicConfig(
+    filename=LOG_FILE,
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 # Initialize ChromaDB and embeddings
 chroma_client = chromadb.PersistentClient(path="/mnt/f/projects/ai-recall-system/chroma_db/")
@@ -94,7 +100,7 @@ def index_markdown_file(markdown_path, collection_name="knowledge_base"):
         should_index = True
         for meta in existing_docs:
             if meta.get("mtime", 0) == mtime and meta.get("hash", "") == file_hash:
-                logging.info(f"✅ Skipped indexing {base_name}: No changes detected (mtime: {mtime}, hash: {file_hash}).")
+                logger.info(f"✅ Skipped indexing {base_name}: No changes detected (mtime: {mtime}, hash: {file_hash}).")
                 should_index = False
                 break
 
@@ -103,7 +109,7 @@ def index_markdown_file(markdown_path, collection_name="knowledge_base"):
             collection.delete(
                 where={"filename": base_name}
             )
-            logging.info(f"🗑️ Removed old version of {base_name} from {collection_name}.")
+            logger.info(f"🗑️ Removed old version of {base_name} from {collection_name}.")
 
             # Store each chunk with metadata (no version, just mtime, hash, and agent if applicable)
             for i, chunk in enumerate(chunks):
@@ -120,10 +126,10 @@ def index_markdown_file(markdown_path, collection_name="knowledge_base"):
                     documents=[chunk],
                     metadatas=[metadata]
                 )
-            logging.info(f"✅ Indexed {base_name} into {collection_name} with {len(chunks)} chunks.")
+            logger.info(f"✅ Indexed {base_name} into {collection_name} with {len(chunks)} chunks.")
         return True
     except Exception as e:
-        logging.error(f"❌ Error indexing {os.path.basename(markdown_path)}: {e}")
+        logger.error(f"❌ Error indexing {os.path.basename(markdown_path)}: {e}")
         return False
 
 if __name__ == "__main__":
@@ -136,9 +142,9 @@ if __name__ == "__main__":
     # Clean up knowledge_base_test_test if it exists before starting
     try:
         chroma_client.delete_collection("knowledge_base_test_test")
-        logging.info("✅ Removed knowledge_base_test_test to prevent duplication.")
+        logger.info("✅ Removed knowledge_base_test_test to prevent duplication.")
     except Exception as e:
-        logging.warning(f"⚠️ Could not remove knowledge_base_test_test: {e}")
+        logger.warning(f"⚠️ Could not remove knowledge_base_test_test: {e}")
 
     # Index existing markdown files, checking for duplicates
     total_indexed = 0
@@ -160,4 +166,4 @@ if __name__ == "__main__":
                     if index_markdown_file(markdown_path):
                         total_indexed += 1
 
-    logging.info(f"✅ index_knowledgebase.py completed indexing successfully in test mode with {total_indexed} files.")
+    logger.info(f"✅ index_knowledgebase.py completed indexing successfully in test mode with {total_indexed} files.")
