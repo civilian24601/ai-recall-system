@@ -21,6 +21,7 @@ import sys
 import time
 import hashlib
 import threading
+import logging
 
 import chromadb
 from langchain_huggingface.embeddings import HuggingFaceEmbeddings
@@ -35,6 +36,7 @@ from watchdog.events import FileSystemEventHandler
 
 CHROMA_DB_PATH = "/mnt/f/projects/ai-recall-system/chroma_db"
 COLLECTION_NAME = "project_codebase"
+LOG_FILE = "/mnt/f/projects/ai-recall-system/logs/script_logs/index_codebase.log"
 
 CHUNK_SIZE_DEFAULT = 300    # lines, for all code files
 CHUNK_OVERLAP = 50         # overlap for all code files
@@ -50,6 +52,14 @@ ROOT_DIRS = ["/mnt/f/projects/ai-recall-system/code_base",
              "/mnt/f/projects/ai-recall-system/tests", 
              "/mnt/f/projects/ai-recall-system/frontend"]  # Focus on code directories
 DEBOUNCE_SECONDS = 2.0
+
+# Setup logging
+logging.basicConfig(
+    filename=LOG_FILE,
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 ##############################################################################
 # UTILS
@@ -99,6 +109,7 @@ def reindex_single_file(filepath, collection, embed_model):
         with open(filepath, "r", encoding="utf-8") as f:
             text = f.read()
     except Exception as e:
+        logger.error(f"Error reading {filepath}: {e}")
         print(f"⚠ Error reading {filepath}: {e}")
         return 0
 
@@ -114,6 +125,7 @@ def reindex_single_file(filepath, collection, embed_model):
                 matched_ids.append(doc_id)
         if matched_ids:
             collection.delete(ids=matched_ids)
+            logger.info(f"Removed {len(matched_ids)} old chunk(s) for updated file: {filepath}")
             print(f"   🔸 Removed {len(matched_ids)} old chunk(s) for updated file: {filepath}")
 
     lines = text.splitlines()
@@ -153,6 +165,7 @@ def reindex_single_file(filepath, collection, embed_model):
         new_chunks_for_file += 1
 
     if new_chunks_for_file > 0:
+        logger.info(f"Re-indexed {new_chunks_for_file} chunk(s) from {filepath}")
         print(f"   ⮑ Re-indexed {new_chunks_for_file} chunk(s) from {filepath}")
 
     return new_chunks_for_file
@@ -162,6 +175,7 @@ def reindex_single_file(filepath, collection, embed_model):
 ##############################################################################
 
 def index_codebase():
+    logger.info(f"Connecting to Chroma at '{CHROMA_DB_PATH}'")
     print(f"🔗 Connecting to Chroma at '{CHROMA_DB_PATH}' ...")
     client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
     collection = client.get_or_create_collection(name=COLLECTION_NAME)
@@ -172,6 +186,7 @@ def index_codebase():
 
     for root_dir in ROOT_DIRS:
         if not os.path.exists(root_dir):
+            logger.warning(f"Root dir not found: {root_dir}. Skipping.")
             print(f"⚠ Root dir not found: {root_dir}. Skipping.")
             continue
 
@@ -185,6 +200,7 @@ def index_codebase():
                     total_files += 1
                     total_new_chunks += added
 
+    logger.info(f"Done indexing. Processed {total_files} files total. Added {total_new_chunks} new chunks.")
     print(f"\n✅ Done indexing. Processed {total_files} files total. Added {total_new_chunks} new chunks.")
 
 ##############################################################################
@@ -209,6 +225,7 @@ class CodebaseEventHandler(FileSystemEventHandler):
 
     def on_moved(self, event):
         if not event.is_directory:
+            logger.info(f"File renamed from {event.src_path} -> {event.dest_path}")
             print(f"\n🔄 File renamed from {event.src_path} -> {event.dest_path}")
             self.remove_file_chunks(event.src_path)
             ext = os.path.splitext(event.dest_path)[1].lower()
@@ -217,18 +234,20 @@ class CodebaseEventHandler(FileSystemEventHandler):
 
     def on_deleted(self, event):
         if not event.is_directory:
+            logger.info(f"File deleted: {event.src_path}, removing old chunks.")
             print(f"\n❌ File deleted: {event.src_path}, removing old chunks.")
             self.remove_file_chunks(event.src_path)
 
     def remove_file_chunks(self, filepath):
         existing_results = self.collection.get(limit=9999)
-        if existing_results and "ids" in existing_results and existing_results["ids"]:  # Fixed typo here too
+        if existing_results and "ids" in existing_results and existing_results["ids"]:
             matched_ids = []
             for doc_id in existing_results["ids"]:
                 if doc_id.startswith(f"{filepath}::chunk_"):
                     matched_ids.append(doc_id)
             if matched_ids:
                 self.collection.delete(ids=matched_ids)
+                logger.info(f"Removed {len(matched_ids)} old chunk(s) for deleted/renamed file: {filepath}")
                 print(f"   🔸 Removed {len(matched_ids)} old chunk(s) for deleted/renamed file: {filepath}")
 
     def _handle_change(self, filepath):
@@ -247,10 +266,12 @@ class CodebaseEventHandler(FileSystemEventHandler):
             else:
                 return
 
+        logger.info(f"Debounced re-index for file: {filepath}")
         print(f"\n🔄 Debounced re-index for file: {filepath}")
         reindex_single_file(filepath, self.collection, self.embed_model)
 
 def watch_for_changes():
+    logger.info(f"Connecting to Chroma at '{CHROMA_DB_PATH}' for watchers...")
     print(f"🔗 Connecting to Chroma at '{CHROMA_DB_PATH}' for watchers...")
     client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
     collection = client.get_or_create_collection(name=COLLECTION_NAME)
@@ -262,6 +283,7 @@ def watch_for_changes():
     for root_dir in ROOT_DIRS:
         if os.path.exists(root_dir):
             observer.schedule(event_handler, path=root_dir, recursive=True)
+            logger.info(f"Watching {root_dir} for changes...")
             print(f"👀 Watching {root_dir} for changes...")
 
     observer.start()
