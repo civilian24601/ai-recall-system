@@ -39,7 +39,7 @@ class BuildAgent:
         self.logs_dir = f"{project_dir}/logs"
         os.makedirs(self.logs_dir, exist_ok=True)
         self.debug_log_file = f"{self.logs_dir}/debug_logs{'_test' if test_mode else ''}.json"
-        self.max_attempts = 5  # Global retry cap per error
+        self.max_attempts = 5
         self.backup_dir = f"{project_dir}/code_base/test_scripts/backup/"
         os.makedirs(self.backup_dir, exist_ok=True)
 
@@ -112,7 +112,6 @@ class BuildAgent:
                 return False, "No function definition found"
             func_name = func_match.group(1)
 
-            # Use original function name and error context for testing
             test_code = f"""
 import sys
 from io import StringIO
@@ -134,7 +133,6 @@ print("Test result:", "Success" if result else f"Failed: {{error}}")
 """
             temp_test_path = script_path + ".test"
             with open(temp_test_path, "w") as f:
-                # Preserve original script content and append test code
                 f.write(script_content + "\n" + test_code)
             result = subprocess.run(
                 ["python3", temp_test_path],
@@ -162,8 +160,8 @@ def authenticate_user(user_data):
 """
         }
         debug_logs = [
-            {"id": "test1", "error": "ZeroDivisionError", "stack_trace": "File 'test_script.py', line 3", "resolved": False},
-            {"id": "test2", "error": "KeyError", "stack_trace": "File 'user_auth.py', line 5", "resolved": False}
+            {"id": "test1", "error": "ZeroDivisionError", "stack_trace": "File 'test_script.py', line 3", "resolved": false},
+            {"id": "test2", "error": "KeyError", "stack_trace": "File 'user_auth.py', line 5", "resolved": false}
         ]
 
         for script_name, content in test_scripts.items():
@@ -227,11 +225,10 @@ def authenticate_user(user_data):
                 context = self.retrieve_context(f"{error} in {script_name}")
                 logging.info(f"Filtered context for {error_id} (guidelines + Python, max 1000 chars): {context}...")
 
-                # Debug: Log initial script content
-                logging.debug(f"Debug: Original script content for {error_id}: {script_content}")
-
                 task_prompt = (
-                    f"Please debug the following script and return ONLY the COMPLETE fixed function in Python using a FULL try/except block with the appropriate except clause to handle the error ({error}), returning None, with NO extra logic, NO prose, and NO explanations, inside ```python\n{script_content}\n```."
+                    f"Please debug the following script and return ONLY the COMPLETE fixed function in Python using a FULL try/except block "
+                    f"with the appropriate except clause to handle the error ({error}), returning None, with NO extra logic, NO prose, "
+                    f"and NO explanations, inside ```python\n{script_content}\n```."
                 )
                 fix = self.agent_manager.delegate_task("engineer", task_prompt, timeout=300)
                 
@@ -240,7 +237,9 @@ def authenticate_user(user_data):
                         logging.warning(f"No valid fix for {error_id} after {attempt_count} attempts. Retrying...")
                         fix = self.agent_manager.delegate_task(
                             "engineer",
-                            f"Please debug the following script and return ONLY the COMPLETE fixed function in Python using a FULL try/except block with the appropriate except clause to handle the error ({error}), returning None, with NO extra logic, NO prose, and NO explanations, inside ```python\n{script_content}\n```.",
+                            f"Please debug the following script and return ONLY the COMPLETE fixed function in Python using a FULL try/except block "
+                            f"with the appropriate except clause to handle the error ({error}), returning None, with NO extra logic, NO prose, "
+                            f"and NO explanations, inside ```python\n{script_content}\n```.",
                             timeout=360
                         )
                     else:
@@ -264,16 +263,17 @@ def authenticate_user(user_data):
                         logging.warning(f"Fix for {error_id} not a string or missing valid ```python``` or specific try/except—skipping fix.")
                         fix = None
 
-                # Review the fix with the reviewer
+                # Ensure reviewer processes the correct fix
                 reviewed_fix = None
                 if fix:
                     review_prompt = (
                         f"Please review this response: {fix}. Strip all prose, test cases, <think> blocks, and irrelevant code. "
-                        f"Return ONLY the COMPLETE fixed function in Python using a FULL try/except block with the appropriate except clause to handle the error ({error}), "
-                        f"returning None, with NO extra logic, NO prose, and NO explanations, inside ```python ... ```."
+                        f"Return ONLY the COMPLETE fixed function in Python using a FULL try/except block with the appropriate except clause "
+                        f"to handle the error ({error}), returning None, with NO extra logic, NO prose, and NO explanations, inside ```python ... ```."
                     )
                     reviewed_fix = self.agent_manager.delegate_task("reviewer", review_prompt, timeout=300)
-                
+                    logging.debug(f"Debug: Reviewed fix for {error_id}: {reviewed_fix}")
+
                 final_fix = fix  # Default to engineer's fix
                 if reviewed_fix and isinstance(reviewed_fix, str) and reviewed_fix.strip():
                     if "```python" in reviewed_fix:
@@ -302,10 +302,15 @@ def authenticate_user(user_data):
                 if final_fix:
                     temp_script_path = script_path + ".tmp"
                     shutil.copy(script_path, temp_script_path)
+                    with open(temp_script_path, "r") as f:
+                        original_content = f.read()
                     with open(temp_script_path, "w") as f:
-                        # Ensure original content is preserved and fix is added
-                        original_content = open(script_path, "r").read()
-                        f.write(original_content.replace(re.search(r"def\s+\w+\s*\(.*?\):.*?(?=\n\n|\Z)", original_content, re.DOTALL).group(0), final_fix) + "\n")
+                        # Replace only the original function with final_fix
+                        func_match = re.search(r"def\s+\w+\s*\(.*?\):.*?(?=\n\n|\Z)", original_content, re.DOTALL)
+                        if func_match:
+                            f.write(original_content.replace(func_match.group(0), final_fix) + "\n")
+                        else:
+                            f.write(final_fix + "\n" + original_content)
 
                     fix_works, fix_error = self.test_fix(temp_script_path, error)
                     if fix_works:

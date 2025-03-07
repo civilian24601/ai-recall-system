@@ -166,6 +166,7 @@ class AgentManager:
         
         if any(prose in result.lower() for prose in ["here's", "here is", "corrected", "fixed", "modified", "<think>"]):
             reviewed_fix = self.review_task(result, timeout)
+            print(f"Debug: Reviewer response for task: {reviewed_fix}")  # Added debug
             if reviewed_fix and isinstance(reviewed_fix, str) and reviewed_fix.strip() and reviewed_fix != "ERROR: No valid function found.":
                 final_fix = self.preprocess_ai_response(reviewed_fix)
             else:
