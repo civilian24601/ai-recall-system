@@ -10,7 +10,7 @@ class AgentManager:
     def __init__(self):
         self.agents = {
             "engineer": "codestral-22b-v0.1",
-            "reviewer": "eaddario/deepseek-r1-distill-qwen-7b",
+            "reviewer": "mistral-7b-instruct-v0.3",  # Updated to your downloaded model
             "architect": "codestral-22b-v0.1",
             "qa": "codestral-22b-v0.1",
             "devops": "codestral-22b-v0.1",
@@ -29,9 +29,9 @@ class AgentManager:
             full_prompt = (
                 f"{task_prompt}\n\n"
                 "Output MUST be a complete Python function inside ```python ... ``` ONLY. "
-                "NO prose, NO <think> blocks, NO test cases, NO comments (#), NO standalone raise statements outside try—strictly code. "
-                "Use try/except for ZeroDivisionError or KeyError ONLY (use 'except (ZeroDivisionError, KeyError)' syntax, not '|'), "
-                "return None in except, no returns outside except."
+                "NO prose (e.g., 'Here's', 'This is'), NO <think> blocks, NO test cases, NO comments (#), NO standalone raise statements outside try. "
+                "Use try/except for ZeroDivisionError or KeyError ONLY (use 'except (ZeroDivisionError, KeyError)' syntax), "
+                "return None in except, NO returns outside except. STRICT ADHERENCE REQUIRED."
             )
             response = requests.post(
                 self.api_url,
@@ -39,17 +39,17 @@ class AgentManager:
                     "model": model,
                     "messages": [{"role": "user", "content": full_prompt}],
                     "max_tokens": 2048,
-                    "temperature": 0.01,
+                    "temperature": 0.01,  # Low temp for strict adherence
                     "top_p": 0.9
                 },
                 timeout=timeout
             )
             response.raise_for_status()
             response_text = response.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
-            # Strip all prose after code, not just <think>
-            code_match = re.search(r"```(?:python)?\s*(.*?)\s*```", response_text, re.DOTALL)
+            # Extract only the code block, ensuring strict formatting
+            code_match = re.search(r"```(?:python)?\s*([\s\S]*?)\s*```", response_text, re.DOTALL)
             if code_match:
-                response_text = code_match.group(0)  # Keep only the code block
+                response_text = f"```python\n{code_match.group(1).strip()}\n```"
             else:
                 response_text = re.sub(r"<think>.*?</think>|\s*This solution:.*$", "", response_text, flags=re.DOTALL).strip()
             print(f"Raw response from {agent} ({model}): {response_text}")
@@ -62,8 +62,9 @@ class AgentManager:
     def review_task(self, codestral_output, timeout=300):
         review_prompt = (
             f"Review this: {codestral_output}. Return ONLY the COMPLETE fixed function in Python "
-            "using a FULL try/except block for ZeroDivisionError or KeyError ONLY (use 'except (ZeroDivisionError, KeyError)' syntax, not '|'), "
-            "returning None, inside ```python ... ```. NO prose, NO <think> blocks, NO extra logic, NO comments (#), NO standalone raise statements outside try, NO returns outside except."
+            "using a FULL try/except block for ZeroDivisionError or KeyError ONLY (use 'except (ZeroDivisionError, KeyError)' syntax), "
+            "returning None in except, inside ```python ... ```. NO prose, NO <think> blocks, NO extra logic, NO comments (#), "
+            "NO standalone raise statements outside try, NO returns outside except. STRICT ADHERENCE REQUIRED."
         )
         return self.send_task("reviewer", review_prompt, timeout)
 
@@ -77,13 +78,13 @@ class AgentManager:
             self.retry_count += 1
             return None
         
-        if "<think>" in ai_response:
-            print(f"⚠️ Preprocessing warning: <think> detected in:\n{ai_response}")
+        if "<think>" in ai_response or any(prose in ai_response.lower() for prose in ["here's", "here is", "corrected", "fixed", "modified"]):
+            print(f"⚠️ Preprocessing warning: Prohibited content detected in:\n{ai_response}")
             self.retry_count += 1
             return None
 
-        # Extract code block with flexible markdown
-        code_block = re.search(r"```(?:python)?\s*(.*?)\s*```", ai_response, re.DOTALL)
+        # Extract and validate code block
+        code_block = re.search(r"```(?:python)?\s*([\s\S]*?)\s*```", ai_response, re.DOTALL)
         if not code_block:
             print(f"⚠️ No code block found in:\n{ai_response}")
             self.retry_count += 1
@@ -105,18 +106,9 @@ class AgentManager:
                         if isinstance(body_node, ast.Try):
                             has_valid_try = True
                             for handler in body_node.handlers:
-                                # Check for ZeroDivisionError or KeyError (single, tuple, or union with '|')
-                                if isinstance(handler.type, ast.Name):
-                                    if handler.type.id in ["ZeroDivisionError", "KeyError"]:
-                                        has_valid_except = True
-                                elif isinstance(handler.type, ast.Tuple):
-                                    if all(isinstance(elt, ast.Name) and elt.id in ["ZeroDivisionError", "KeyError"] for elt in handler.type.elts):
-                                        has_valid_except = True
-                                elif isinstance(handler.type, ast.BinOp) and isinstance(handler.type.op, ast.BitOr):
-                                    left = handler.type.left
-                                    right = handler.type.right
-                                    if (isinstance(left, ast.Name) and left.id in ["ZeroDivisionError", "KeyError"] and 
-                                        isinstance(right, ast.Name) and right.id in ["ZeroDivisionError", "KeyError"]):
+                                if isinstance(handler.type, (ast.Tuple, ast.Name)):
+                                    exceptions = [handler.type.id] if isinstance(handler.type, ast.Name) else [elt.id for elt in handler.type.elts if isinstance(elt, ast.Name)]
+                                    if all(exc in ["ZeroDivisionError", "KeyError"] for exc in exceptions):
                                         has_valid_except = True
                                 # Check return None in except
                                 for stmt in handler.body:
@@ -125,13 +117,13 @@ class AgentManager:
                             # Allow Raise, returns, and expressions in try block
                             for stmt in body_node.body:
                                 if isinstance(stmt, (ast.Return, ast.Raise, ast.Expr)):
-                                    continue  # Valid in try (comments, raises, returns)
-                        # Check for standalone Raise outside Try (reject)
+                                    continue  # Valid in try
+                        # Reject standalone Raise outside Try
                         elif isinstance(body_node, ast.Raise):
                             print(f"⚠️ Standalone raise statement found outside try/except in:\n{code}")
                             self.retry_count += 1
                             return None
-                    # Check for prose or invalid structure (reject Str nodes outside Try)
+                    # Reject prose or invalid structure (Str nodes outside Try)
                     if any(isinstance(n, ast.Expr) and isinstance(n.value, ast.Str) for n in node.body if not isinstance(n, ast.Try)):
                         print(f"⚠️ Prose detected in function body:\n{code}")
                         self.retry_count += 1
@@ -163,7 +155,7 @@ class AgentManager:
             print(f"❌ Still invalid. Last try with strict mode...")
             result = self.send_task(
                 agent,
-                f"STRICT MODE: {task_description}\nRespond with code in ```python ... ``` or 'ERROR: No response.'",
+                f"STRICT MODE: {task_description}\nRespond with ONLY a complete Python function in ```python ... ``` or 'ERROR: No response.'",
                 timeout + 60
             )
         

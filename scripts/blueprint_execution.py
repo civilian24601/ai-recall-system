@@ -12,6 +12,8 @@ import json
 import traceback
 import time
 import chromadb
+import logging
+import shutil
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PARENT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
@@ -19,11 +21,13 @@ sys.path.append(PARENT_DIR)
 
 from code_base.agent_manager import AgentManager
 
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
 class BlueprintExecution:
     def __init__(self, agent_manager=None, test_mode=False, collections=None):
-        self.agent_manager = agent_manager or AgentManager()  # Default to new instance if None
+        self.agent_manager = agent_manager or AgentManager()
         self.test_mode = test_mode
-        self.collections = collections  # Use passed collections
+        self.collections = collections
         
         if not self.collections:
             raise ValueError("Collections must be provided to BlueprintExecution")
@@ -44,21 +48,52 @@ class BlueprintExecution:
             "LLM-based improvement notes enabled with agent_manager."
         )
 
-    def run_blueprint(self, blueprint_id, task_name, script_path, execution_context):
+    def run_blueprint(self, blueprint_id, task_name, script_path, execution_context, final_fix=None, original_error=None):
         """Executes a blueprint task, logs BELog, evolves if improved."""
         print(f"⚙️ Running blueprint {blueprint_id}: {task_name}")
         
         start_time = time.time()
         try:
-            # Use delegate_task instead of execute_task
-            task_result = self.agent_manager.delegate_task(
-                "engineer",
-                f"Execute task '{task_name}' on script {script_path} with context: {execution_context}",
-                timeout=300
-            )
+            if task_name == "Apply fix":
+                if not final_fix:
+                    raise ValueError("final_fix is required for 'Apply fix' task")
+                
+                # Apply the final_fix to the original script
+                temp_script_path = script_path + ".tmp"
+                shutil.copy(script_path, temp_script_path)
+                with open(temp_script_path, "r") as f:
+                    original_content = f.read()
+                with open(temp_script_path, "w") as f:
+                    # Replace the original function with final_fix
+                    func_match = re.search(r"def\s+\w+\s*\(.*?\):.*?(?=\n\n|\Z)", original_content, re.DOTALL)
+                    if func_match:
+                        f.write(original_content.replace(func_match.group(0), final_fix) + "\n")
+                    else:
+                        f.write(final_fix + "\n" + original_content)
+
+                # Validate the fix
+                fix_works, fix_error = self.agent_manager.test_fix(temp_script_path, original_error) if original_error else (False, "No original error provided")
+                
+                if fix_works:
+                    shutil.move(temp_script_path, script_path)
+                    logging.info(f"Applied valid fix to {script_path}")
+                    task_result = final_fix
+                    success = True
+                else:
+                    os.remove(temp_script_path)
+                    logging.warning(f"Fix for {task_name} failed validation: {fix_error}—preserving original script.")
+                    task_result = None
+                    success = False
+            else:
+                task_result = self.agent_manager.delegate_task(
+                    "engineer",
+                    f"Execute task '{task_name}' on script {script_path} with context: {execution_context}",
+                    timeout=300
+                )
+                success = task_result and "def placeholder" not in task_result
+
             execution_time = time.time() - start_time
-            errors = "None" if task_result and "def placeholder" not in task_result else "Task execution failed"
-            success = task_result and "def placeholder" not in task_result
+            errors = "None" if task_result and "def placeholder" not in task_result else "Task execution failed" if not success else "None"
             efficiency_score = int(100 - (execution_time * 10)) if success else 20
             
             execution_trace_id = self.log_execution(

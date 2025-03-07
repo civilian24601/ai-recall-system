@@ -6,6 +6,7 @@ Single-agent workflow for the AI Recall System build engine with automated reset
 - Queries aggregator_search for context, filtering out markdown and prioritizing ai_coding_guidelines.md for rules, then Python code.
 - Delegates execution to blueprint_execution.
 - Manages debug log loop with capped retries, two-LLM processing, and state reset.
+- Stages fixes on temporary files, validating before overwriting originals.
 """
 
 import os
@@ -42,102 +43,6 @@ class BuildAgent:
         self.backup_dir = f"{project_dir}/code_base/test_scripts/backup/"
         os.makedirs(self.backup_dir, exist_ok=True)
 
-    def log_entry(self, collection_name, entry_id, data):
-        collection = self.collections[collection_name]
-        meta = {"timestamp": time.strftime("%Y-%m-%d %H:%M:%S"), "id": entry_id}
-        collection.upsert(
-            ids=[entry_id],
-            documents=[json.dumps(data)],
-            metadatas=[meta]
-        )
-        logging.info(f"Logged entry '{entry_id}' to {collection_name}")
-
-    def retrieve_context(self, query):
-        """Retrieve context, filtering out markdown and prioritizing ai_coding_guidelines.md for rules, then Python code."""
-        try:
-            results = aggregator_search(query, top_n=3, mode="guidelines_code")  # New mode for guidelines + code
-            # Filter for ai_coding_guidelines.md and Python files, exclude other .md
-            guidelines_context = [r["document"] for r in results if r.get("metadata", {}).get("filename") == "ai_coding_guidelines.md"]
-            code_context = [r["document"] for r in results if r.get("metadata", {}).get("filename", "").endswith(".py")]
-            context = "\n".join(guidelines_context[:1] + code_context[:2])  # Limit to 1 guideline snippet + 2 Python files, max 1000 chars
-            if not context:
-                logging.warning(f"No relevant context (guidelines or Python code) found for query: {query}")
-                # Try to fetch guidelines as fallback
-                guidelines_results = aggregator_search(query, top_n=1, mode="guidelines")
-                guidelines_context = [r["document"] for r in guidelines_results if r.get("metadata", {}).get("filename") == "ai_coding_guidelines.md"]
-                context = "\n".join(guidelines_context[:1])[:1000] if guidelines_context else ""
-                if not context:
-                    logging.error(f"Failed to retrieve any context for query: {query}")
-            # Truncate context to 1000 characters to prevent model overload
-            context = context[:1000] if len(context) > 1000 else context
-            logging.debug(f"Filtered context for query '{query}' (guidelines + Python, max 1000 chars): {context}...")
-            return context
-        except Exception as e:
-            logging.error(f"Error retrieving context for query '{query}': {e}")
-            return ""
-
-    def test_fix(self, script_path):
-        try:
-            result = subprocess.run(
-                ["python3", script_path],
-                capture_output=True, text=True, timeout=10
-            )
-            return result.returncode == 0 or "Handled" in result.stdout, result.stderr
-        except subprocess.TimeoutExpired:
-            return False, "Timeout: Script hung"
-        except Exception as e:
-            return False, str(e)
-
-    def reset_state(self):
-        """Reset test scripts and debug logs to initial broken states."""
-        # Backup current files (if not already backed up)
-        test_scripts = {
-            "test_script.py": """
-def divide(a, b):
-    return a / b  # Fails on b=0
-""",
-            "user_auth.py": """
-def authenticate_user(user_data):
-    return user_data["username"]  # Fails if 'username' missing
-"""
-        }
-        debug_logs = [
-            {"id": "test1", "error": "ZeroDivisionError", "stack_trace": "File 'test_script.py', line 3", "resolved": False},
-            {"id": "test2", "error": "KeyError", "stack_trace": "File 'user_auth.py', line 5", "resolved": False}
-        ]
-
-        # Save initial states to backup if not exist
-        for script_name, content in test_scripts.items():
-            backup_path = os.path.join(self.backup_dir, script_name)
-            if not os.path.exists(backup_path):
-                with open(backup_path, "w") as f:
-                    f.write(content.strip() + "\n")
-        
-        # Restore test scripts
-        for script_name, content in test_scripts.items():
-            script_path = os.path.join(self.project_dir, "code_base/test_scripts", script_name)
-            with open(script_path, "w") as f:
-                f.write(content.strip() + "\n")
-
-        # Restore debug logs
-        with open(self.debug_log_file, "w") as f:
-            json.dump(debug_logs, f, indent=4)
-
-        logging.info("Reset test scripts and debug logs to initial states.")
-
-    def run(self):
-        logging.info("Starting Build Agent with automated reset, filtered context, simplified prompts, and RAG for ai_coding_guidelines.md...")
-        
-        # Reset state before running
-        self.reset_state()
-        
-        test_collections = ["execution_logs_test", "blueprint_versions_test", "project_codebase_test"]
-        for coll in test_collections:
-            try:
-                self.chroma_client.delete_collection(coll)
-            except Exception:
-                pass
-        
         self.collections = {
             "knowledge_base": self.chroma_client.get_or_create_collection(
                 name="knowledge_base" if not self.test_mode else "knowledge_base_test"
@@ -161,12 +66,134 @@ def authenticate_user(user_data):
                 name="markdown_logs" if not self.test_mode else "markdown_logs_test"
             )
         }
-        
         self.blueprint_executor = BlueprintExecution(
             agent_manager=self.agent_manager,
             test_mode=self.test_mode,
             collections=self.collections
         )
+
+    def log_entry(self, collection_name, entry_id, data):
+        collection = self.collections[collection_name]
+        meta = {"timestamp": time.strftime("%Y-%m-%d %H:%M:%S"), "id": entry_id}
+        collection.upsert(
+            ids=[entry_id],
+            documents=[json.dumps(data)],
+            metadatas=[meta]
+        )
+        logging.info(f"Logged entry '{entry_id}' to {collection_name}")
+
+    def retrieve_context(self, query):
+        try:
+            results = aggregator_search(query, top_n=3, mode="guidelines_code")
+            guidelines_context = [r["document"] for r in results if r.get("metadata", {}).get("filename") == "ai_coding_guidelines.md"]
+            code_context = [r["document"] for r in results if r.get("metadata", {}).get("filename", "").endswith(".py")]
+            context = "\n".join(guidelines_context[:1] + code_context[:2])
+            if not context:
+                logging.warning(f"No relevant context (guidelines or Python code) found for query: {query}")
+                guidelines_results = aggregator_search(query, top_n=1, mode="guidelines")
+                guidelines_context = [r["document"] for r in guidelines_results if r.get("metadata", {}).get("filename") == "ai_coding_guidelines.md"]
+                context = "\n".join(guidelines_context[:1])[:1000] if guidelines_context else ""
+                if not context:
+                    logging.error(f"Failed to retrieve any context for query: {query}")
+            context = context[:1000] if len(context) > 1000 else context
+            logging.debug(f"Filtered context for query '{query}' (guidelines + Python, max 1000 chars): {context}...")
+            return context
+        except Exception as e:
+            logging.error(f"Error retrieving context for query '{query}': {e}")
+            return ""
+
+    def test_fix(self, script_path, original_error):
+        """Test if the fix handles the original error."""
+        try:
+            with open(script_path, "r") as f:
+                script_content = f.read()
+            func_match = re.search(r"def\s+(\w+)\s*\(", script_content)
+            if not func_match:
+                return False, "No function definition found"
+            func_name = func_match.group(1)
+
+            # Use original function name and error context for testing
+            test_code = f"""
+import sys
+from io import StringIO
+def run_test():
+    original_stdout = sys.stdout
+    sys.stdout = StringIO()
+    try:
+        if "{func_name}" == "divide":
+            result = {func_name}(10, 0)
+        elif "{func_name}" == "authenticate_user":
+            result = {func_name}({{'password': 'secure123'}})
+        sys.stdout = original_stdout
+        return result is not None or "Handled" in sys.stdout.getvalue()
+    except Exception as e:
+        sys.stdout = original_stdout
+        return False, str(e)
+result, error = run_test()
+print("Test result:", "Success" if result else f"Failed: {{error}}")
+"""
+            temp_test_path = script_path + ".test"
+            with open(temp_test_path, "w") as f:
+                # Preserve original script content and append test code
+                f.write(script_content + "\n" + test_code)
+            result = subprocess.run(
+                ["python3", temp_test_path],
+                capture_output=True, text=True, timeout=10
+            )
+            os.remove(temp_test_path)
+            output = result.stdout.strip()
+            if "Test result: Success" in output or "Handled" in output:
+                return True, ""
+            return False, result.stderr or "Fix did not handle the original error"
+        except subprocess.TimeoutExpired:
+            return False, "Timeout: Script hung"
+        except Exception as e:
+            return False, str(e)
+
+    def reset_state(self):
+        test_scripts = {
+            "test_script.py": """
+def divide(a, b):
+    return a / b  # Fails on b=0
+""",
+            "user_auth.py": """
+def authenticate_user(user_data):
+    return user_data["username"]  # Fails if 'username' missing
+"""
+        }
+        debug_logs = [
+            {"id": "test1", "error": "ZeroDivisionError", "stack_trace": "File 'test_script.py', line 3", "resolved": False},
+            {"id": "test2", "error": "KeyError", "stack_trace": "File 'user_auth.py', line 5", "resolved": False}
+        ]
+
+        for script_name, content in test_scripts.items():
+            backup_path = os.path.join(self.backup_dir, script_name)
+            if not os.path.exists(backup_path):
+                with open(backup_path, "w") as f:
+                    f.write(content.strip() + "\n")
+        
+        for script_name, content in test_scripts.items():
+            script_path = os.path.join(self.project_dir, "code_base/test_scripts", script_name)
+            with open(script_path, "w") as f:
+                f.write(content.strip() + "\n")
+
+        with open(self.debug_log_file, "w") as f:
+            json.dump(debug_logs, f, indent=4)
+
+        logging.info("Reset test scripts and debug logs to initial states.")
+
+    def run(self):
+        logging.info("Starting Build Agent with blueprint-driven execution and RAG for ai_coding_guidelines.md...")
+        
+        self.reset_state()
+        
+        blueprint_path = f"{self.project_dir}/blueprints/agent_blueprint_v1.json"
+        if not os.path.exists(blueprint_path):
+            logging.error(f"Blueprint not found: {blueprint_path}")
+            return
+
+        with open(blueprint_path, "r") as f:
+            blueprint = json.load(f)
 
         attempt_count = 0
         while attempt_count < self.max_attempts:
@@ -182,7 +209,7 @@ def authenticate_user(user_data):
                 error_id = log.get("id", f"error_{time.time()}")
                 error = log.get("error", "Unknown error")
                 stack_trace = log.get("stack_trace", "")
-                attempt_count += 1  # Increment for each log attempt
+                attempt_count += 1
 
                 script_name = stack_trace.split("'")[1] if "'" in stack_trace else None
                 if not script_name:
@@ -198,90 +225,104 @@ def authenticate_user(user_data):
                     script_content = f.read()
 
                 context = self.retrieve_context(f"{error} in {script_name}")
-                logging.info(f"Filtered context for {error_id} (guidelines + Python, max 1000 chars): {context}...")  # Log full context
+                logging.info(f"Filtered context for {error_id} (guidelines + Python, max 1000 chars): {context}...")
+
+                # Debug: Log initial script content
+                logging.debug(f"Debug: Original script content for {error_id}: {script_content}")
 
                 task_prompt = (
                     f"Please debug the following script and return ONLY the COMPLETE fixed function in Python using a FULL try/except block with the appropriate except clause to handle the error ({error}), returning None, with NO extra logic, NO prose, and NO explanations, inside ```python\n{script_content}\n```."
                 )
                 fix = self.agent_manager.delegate_task("engineer", task_prompt, timeout=300)
                 
-                if fix is None or fix == "def placeholder():\n    pass":
+                if fix is None or not fix.strip():
                     if attempt_count < self.max_attempts:
-                        logging.warning(f"No valid fix for {error_id} after {attempt_count} attempts. Retrying manually...")
+                        logging.warning(f"No valid fix for {error_id} after {attempt_count} attempts. Retrying...")
                         fix = self.agent_manager.delegate_task(
                             "engineer",
                             f"Please debug the following script and return ONLY the COMPLETE fixed function in Python using a FULL try/except block with the appropriate except clause to handle the error ({error}), returning None, with NO extra logic, NO prose, and NO explanations, inside ```python\n{script_content}\n```.",
                             timeout=360
                         )
                     else:
-                        logging.error(f"Max attempts reached for {error_id}—using fallback.")
-                        fix = "def placeholder():\n    pass"
+                        logging.error(f"Max attempts reached for {error_id}—skipping fix to preserve script.")
+                        fix = None
                 elif not isinstance(fix, str) or not fix.strip():
-                    logging.warning(f"Invalid fix format for {error_id}—using fallback.")
-                    fix = "def placeholder():\n    pass"
+                    logging.warning(f"Invalid fix format for {error_id}—skipping fix.")
+                    fix = None
                 
-                if isinstance(fix, str) and "```python" in fix:
+                if fix and "```python" in fix:
                     try:
                         fix = re.search(r"```python\s*(.*?)\s*```", fix, re.DOTALL).group(1).strip()
                     except AttributeError:
-                        logging.warning(f"Fix for {error_id} not in expected ```python``` format—using fallback.")
-                        fix = "def placeholder():\n    pass"
+                        logging.warning(f"Fix for {error_id} not in expected ```python``` format—skipping fix.")
+                        fix = None
                 else:
-                    # Try to extract raw try/except function with specific errors if ```python``` is missing
-                    raw_func = re.search(r"(def\s+\w+$$ .*? $$:.*?(try:.*?except\s+(?:ZeroDivisionError|KeyError):.*?return\s+None))", fix, re.DOTALL | re.MULTILINE)
+                    raw_func = re.search(r"def\s+(\w+)\s*$$ .*? $$:.*?(try:.*?except\s+(?:ZeroDivisionError|KeyError):.*?return\s+None)", fix, re.DOTALL | re.MULTILINE)
                     if raw_func:
-                        fix = raw_func.group(1).strip()
+                        fix = raw_func.group(0).strip()
                     else:
-                        logging.warning(f"Fix for {error_id} not a string or missing valid ```python``` or specific try/except—using fallback.")
-                        fix = "def placeholder():\n    pass"
+                        logging.warning(f"Fix for {error_id} not a string or missing valid ```python``` or specific try/except—skipping fix.")
+                        fix = None
+
+                # Review the fix with the reviewer
+                reviewed_fix = None
+                if fix:
+                    review_prompt = (
+                        f"Please review this response: {fix}. Strip all prose, test cases, <think> blocks, and irrelevant code. "
+                        f"Return ONLY the COMPLETE fixed function in Python using a FULL try/except block with the appropriate except clause to handle the error ({error}), "
+                        f"returning None, with NO extra logic, NO prose, and NO explanations, inside ```python ... ```."
+                    )
+                    reviewed_fix = self.agent_manager.delegate_task("reviewer", review_prompt, timeout=300)
                 
-                # Review the fix with DeepSeek R1 Distill Qwen 7B
-                review_prompt = (
-                    f"Please review this response: {fix}. Strip all prose, test cases, <think> blocks, and irrelevant code. "
-                    "Return ONLY the COMPLETE fixed function in Python using a FULL try/except block with the appropriate except clause to handle the error (e.g., ZeroDivisionError, KeyError), returning None, with NO extra logic, NO prose, and NO explanations, inside ```python ... ```."
-                )
-                reviewed_fix = self.agent_manager.delegate_task("reviewer", review_prompt, timeout=300)
-                
+                final_fix = fix  # Default to engineer's fix
                 if reviewed_fix and isinstance(reviewed_fix, str) and reviewed_fix.strip():
                     if "```python" in reviewed_fix:
                         try:
-                            final_fix = re.search(r"```python\s*(.*?)\s*```", reviewed_fix, re.DOTALL).group(1).strip()
+                            reviewed_fix = re.search(r"```python\s*(.*?)\s*```", reviewed_fix, re.DOTALL).group(1).strip()
+                            raw_func = re.search(r"def\s+(\w+)\s*\(.*?\):.*?(try:.*?except\s+(?:ZeroDivisionError|KeyError):.*?return\s+None)", reviewed_fix, re.DOTALL | re.MULTILINE)
+                            if raw_func:
+                                final_fix = raw_func.group(0).strip()
+                            else:
+                                logging.warning(f"Reviewed fix for {error_id} missing valid try/except—using original fix.")
                         except AttributeError:
                             logging.warning(f"Reviewed fix for {error_id} not in expected ```python``` format—using original fix.")
-                            final_fix = fix
-                    elif re.search(r"(def\s+\w+\(.*?\):.*?(try:.*?except\s+(?:ZeroDivisionError|KeyError):.*?return\s+None))", reviewed_fix, re.DOTALL | re.MULTILINE):
-                        # Extract raw try/except function with specific errors if ```python``` is missing
-                        final_fix = re.search(r"(def\s+\w+\(.*?\):.*?(try:.*?except\s+(?:ZeroDivisionError|KeyError):.*?return\s+None))", reviewed_fix, re.DOTALL | re.MULTILINE).group(1).strip()
                     else:
-                        logging.warning(f"Reviewed fix for {error_id} missing valid ```python``` or specific try/except—using original fix.")
-                        final_fix = fix
-                else:
-                    logging.warning(f"Review failed for {error_id}—using original fix.")
-                    final_fix = fix
+                        raw_func = re.search(r"def\s+(\w+)\s*\(.*?\):.*?(try:.*?except\s+(?:ZeroDivisionError|KeyError):.*?return\s+None)", reviewed_fix, re.DOTALL | re.MULTILINE)
+                        if raw_func:
+                            final_fix = raw_func.group(0).strip()
+                        else:
+                            logging.warning(f"Reviewed fix for {error_id} missing valid try/except—using original fix.")
 
-                logging.info(f"Final suggested fix for {error_id} after review:\n{final_fix}")
+                # Debug: Log final fix
+                logging.debug(f"Debug: Final fix for {error_id}: {final_fix}")
 
-                test_case = (
-                    "# Test\n"
-                    "result = divide(10, 0)\n"
-                    "print(result if result is not None else 'Handled zero division')"
-                    if "divide" in script_name else
-                    "# Test\n"
-                    "user_info = {'password': 'secure123'}\n"
-                    "result = authenticate_user(user_info)\n"
-                    "print(result if result is not None else 'Handled key error')"
-                )
-                
-                with open(script_path, "w") as f:
-                    full_script = f"{final_fix}\n\n{test_case}"
-                    f.write(full_script)
+                # Stage and validate the fix
+                fix_works = False
+                fix_error = "No validation performed"
+                if final_fix:
+                    temp_script_path = script_path + ".tmp"
+                    shutil.copy(script_path, temp_script_path)
+                    with open(temp_script_path, "w") as f:
+                        # Ensure original content is preserved and fix is added
+                        original_content = open(script_path, "r").read()
+                        f.write(original_content.replace(re.search(r"def\s+\w+\s*\(.*?\):.*?(?=\n\n|\Z)", original_content, re.DOTALL).group(0), final_fix) + "\n")
+
+                    fix_works, fix_error = self.test_fix(temp_script_path, error)
+                    if fix_works:
+                        shutil.move(temp_script_path, script_path)
+                        logging.info(f"Applied valid fix to {script_path}")
+                    else:
+                        os.remove(temp_script_path)
+                        logging.warning(f"Fix for {error_id} failed validation: {fix_error}")
 
                 blueprint_id = f"bp_fix_{error_id}"
                 execution_trace_id = self.blueprint_executor.run_blueprint(
                     blueprint_id=blueprint_id,
                     task_name="Apply fix",
                     script_path=script_path,
-                    execution_context=context
+                    execution_context=context,
+                    final_fix=final_fix,
+                    original_error=error
                 )
                 
                 if execution_trace_id:
@@ -289,16 +330,15 @@ def authenticate_user(user_data):
                     log_data = json.loads(log_result["documents"][0]) if log_result["documents"] else {}
                     success = log_data.get("success", False)
                     
-                    fix_works, fix_error = self.test_fix(script_path)
-                    resolved = fix_works  # Only resolve if test passes
+                    resolved = fix_works
                     
                     log_entry = {
                         "id": error_id,
                         "error": error,
                         "stack_trace": stack_trace,
                         "fix": final_fix,
-                        "codestral_fix": fix,  # Log original Codestral output for debugging
-                        "reviewed_fix": reviewed_fix if reviewed_fix else "None",  # Log review output
+                        "codestral_fix": fix,
+                        "reviewed_fix": reviewed_fix if reviewed_fix else "None",
                         "resolved": resolved,
                         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
                         "execution_trace_id": execution_trace_id,
@@ -318,7 +358,6 @@ def authenticate_user(user_data):
                 logging.error("Max attempts reached for unresolved issues—exiting.")
                 break
 
-        # Reset state after run (tear down)
         self.reset_state()
         logging.info("Completed run and reset state for next test.")
 
