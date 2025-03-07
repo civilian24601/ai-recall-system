@@ -1,0 +1,11 @@
+{
+    "blueprint_id": "agent_blueprint_v1",
+    "version": "1.0",
+    "tasks": [
+      {
+        "task_name": "Apply fix",
+        "description": "Applies a fix to the specified script.",
+        "expected_outcome": "Fix applied successfully"
+      }
+    ]
+  }
