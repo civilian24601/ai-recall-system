@@ -54,7 +54,7 @@ class BuildAgent:
                 name="debugging_logs" if not self.test_mode else "debugging_logs_test"
             ),
             "project_codebase": self.chroma_client.get_or_create_collection(
-                name="project_codebase" if not self.test_mode else "project_codebase_test"
+                name="project_codebase" if not self.test_mode else "projectcodebase_test"
             ),
             "blueprint_versions": self.chroma_client.get_or_create_collection(
                 name="blueprint_versions" if not self.test_mode else "blueprint_versions_test"
@@ -231,7 +231,8 @@ def authenticate_user(user_data):
                     f"and NO explanations, inside ```python\n{script_content}\n```."
                 )
                 fix = self.agent_manager.delegate_task("engineer", task_prompt, timeout=300)
-                
+                logging.debug(f"Debug: Engineer's fix for {error_id}: {fix}")  # Added debug
+
                 if fix is None or not fix.strip():
                     if attempt_count < self.max_attempts:
                         logging.warning(f"No valid fix for {error_id} after {attempt_count} attempts. Retrying...")
@@ -263,7 +264,7 @@ def authenticate_user(user_data):
                         logging.warning(f"Fix for {error_id} not a string or missing valid ```python``` or specific try/except—skipping fix.")
                         fix = None
 
-                # Ensure reviewer processes the correct fix
+                # Force reviewer call with fallback
                 reviewed_fix = None
                 if fix:
                     review_prompt = (
@@ -274,7 +275,7 @@ def authenticate_user(user_data):
                     reviewed_fix = self.agent_manager.delegate_task("reviewer", review_prompt, timeout=300)
                     logging.debug(f"Debug: Reviewed fix for {error_id}: {reviewed_fix}")
 
-                final_fix = fix  # Default to engineer's fix
+                final_fix = fix if fix else None  # Ensure final_fix is set to fix if valid
                 if reviewed_fix and isinstance(reviewed_fix, str) and reviewed_fix.strip():
                     if "```python" in reviewed_fix:
                         try:
