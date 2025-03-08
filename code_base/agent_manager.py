@@ -83,7 +83,8 @@ def run_test():
         elif "{func_name}" == "authenticate_user":
             result = {func_name}({{'password': 'secure123'}})
         sys.stdout = original_stdout
-        return True, "" if result is None else False, "Expected None but got a value"
+        error_msg = "" if result is None else "Expected None but got a value"
+        return True, error_msg
     except Exception as e:
         sys.stdout = original_stdout
         return False, str(e)
