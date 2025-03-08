@@ -61,13 +61,13 @@ class AgentManager:
                 script_content = f.read()
             logging.debug(f"Original script content: {script_content}")
 
-            # Extract only the fixed function (the first definition, as the script should only contain the fixed version)
-            func_match = re.search(r"(def\s+\w+\s*\(.*?\):.*?(?=\n\n|\Z))", script_content, re.DOTALL)
+            # Extract only the first function definition as the fixed function
+            func_match = re.search(r"def\s+(\w+)\s*\((.*?)\):([\s\S]*?)(?=(?:def\s+\w+\s*\(|$))", script_content, re.MULTILINE)
             if not func_match:
                 logging.error("No function definition found in script")
                 return False, "No function definition found"
-            fixed_function = func_match.group(1).strip()
-            func_name = re.search(r"def\s+(\w+)\s*\(", fixed_function).group(1)
+            func_name = func_match.group(1)
+            fixed_function = f"def {func_name}({func_match.group(2)}):{func_match.group(3).strip()}"
             logging.debug(f"Extracted function name: {func_name}, fixed function: {fixed_function}")
 
             # Create a test script with only the fixed function
@@ -90,7 +90,7 @@ def run_test():
         sys.stdout = original_stdout
         return False, str(e)
 result, error = run_test()
-print("Test result:", "Success" if result else f"Failed: {{error}}")
+print("Test result:", "Success" if result else f"Failed: {error}")
 """
             logging.debug(f"Generated test code: {test_code}")
 
