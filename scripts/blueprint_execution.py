@@ -22,7 +22,7 @@ sys.path.append(PARENT_DIR)
 
 from code_base.agent_manager import AgentManager
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class BlueprintExecution:
     def __init__(self, agent_manager=None, test_mode=False, collections=None):
@@ -65,14 +65,23 @@ class BlueprintExecution:
                 with open(temp_script_path, "r") as f:
                     original_content = f.read()
                 with open(temp_script_path, "w") as f:
-                    func_match = re.search(r"def\s+\w+\s*$$ .*? $$:.*?(?=\n\n|\Z)", original_content, re.DOTALL)
+                    func_match = re.search(r"def\s+\w+\s*\(.*?\):.*?(?=\n\n|\Z)", original_content, re.DOTALL)
                     if func_match:
                         f.write(original_content.replace(func_match.group(0), final_fix) + "\n")
                     else:
                         f.write(final_fix + "\n" + original_content)
 
-                # Validate the fix using AgentManager's test_fix
-                fix_works, fix_error = self.agent_manager.test_fix(temp_script_path, original_error) if original_error else (False, "No original error provided")
+                # Validate the fix using AgentManager's test_fix with debug logging
+                logging.debug(f"Validating fix for {script_path} with original_error: {original_error}")
+                fix_works = False
+                fix_error = "No validation performed"
+                if original_error:
+                    try:
+                        fix_works, fix_error = self.agent_manager.test_fix(temp_script_path, original_error)
+                        logging.debug(f"Validation result for {script_path}: fix_works={fix_works}, fix_error={fix_error}")
+                    except Exception as e:
+                        logging.error(f"Validation failed for {script_path}: {e}")
+                        fix_error = str(e)
                 
                 if fix_works:
                     shutil.move(temp_script_path, script_path)
@@ -82,6 +91,7 @@ class BlueprintExecution:
                 else:
                     if os.path.exists(temp_script_path):
                         os.remove(temp_script_path)
+                        logging.debug(f"Cleaned up temp file after validation failure: {temp_script_path}")
                     logging.warning(f"Fix for {task_name} failed validation: {fix_error}—preserving original script.")
                     task_result = None
                     success = False
