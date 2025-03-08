@@ -27,7 +27,8 @@ from scripts.aggregator_search import aggregator_search
 from scripts.index_codebase import reindex_single_file
 from scripts.blueprint_execution import BlueprintExecution
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# Set logging to DEBUG for detailed output
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class BuildAgent:
     def __init__(self, project_dir="/mnt/f/projects/ai-recall-system", test_mode=False):
@@ -54,7 +55,7 @@ class BuildAgent:
                 name="debugging_logs" if not self.test_mode else "debugging_logs_test"
             ),
             "project_codebase": self.chroma_client.get_or_create_collection(
-                name="project_codebase" if not self.test_mode else "projectcodebase_test"
+                name="projectcodebase" if not self.test_mode else "projectcodebase_test"
             ),
             "blueprint_versions": self.chroma_client.get_or_create_collection(
                 name="blueprint_versions" if not self.test_mode else "blueprint_versions_test"
@@ -231,7 +232,7 @@ def authenticate_user(user_data):
                     f"and NO explanations, inside ```python\n{script_content}\n```."
                 )
                 fix = self.agent_manager.delegate_task("engineer", task_prompt, timeout=300)
-                logging.debug(f"Debug: Engineer's fix for {error_id}: {fix}")  # Added debug
+                logging.debug(f"Debug: Engineer's fix for {error_id}: {fix}")  # Confirm engineer output
 
                 if fix is None or not fix.strip():
                     if attempt_count < self.max_attempts:
@@ -250,37 +251,44 @@ def authenticate_user(user_data):
                     logging.warning(f"Invalid fix format for {error_id}—skipping fix.")
                     fix = None
                 
+                # Force parse fix to ensure it's a valid function
                 if fix and "```python" in fix:
                     try:
                         fix = re.search(r"```python\s*(.*?)\s*```", fix, re.DOTALL).group(1).strip()
+                        raw_func = re.search(r"def\s+(\w+)\s*$$ .*? $$:.*?(try:.*?except\s+(?:ZeroDivisionError|KeyError):.*?return\s+None)", fix, re.DOTALL | re.MULTILINE)
+                        if raw_func:
+                            fix = raw_func.group(0).strip()
+                        else:
+                            logging.warning(f"Fix for {error_id} missing valid try/except after parsing—using raw response.")
+                            fix = re.search(r"```python\s*(.*?)\s*```", fix, re.DOTALL).group(1).strip() if "```python" in fix else fix
                     except AttributeError:
-                        logging.warning(f"Fix for {error_id} not in expected ```python``` format—skipping fix.")
-                        fix = None
+                        logging.warning(f"Fix for {error_id} not in expected ```python``` format—using raw response.")
+                        fix = fix if isinstance(fix, str) else None
                 else:
-                    raw_func = re.search(r"def\s+(\w+)\s*$$ .*? $$:.*?(try:.*?except\s+(?:ZeroDivisionError|KeyError):.*?return\s+None)", fix, re.DOTALL | re.MULTILINE)
+                    raw_func = re.search(r"def\s+(\w+)\s*\(.*?\):.*?(try:.*?except\s+(?:ZeroDivisionError|KeyError):.*?return\s+None)", fix, re.DOTALL | re.MULTILINE)
                     if raw_func:
                         fix = raw_func.group(0).strip()
                     else:
-                        logging.warning(f"Fix for {error_id} not a string or missing valid ```python``` or specific try/except—skipping fix.")
+                        logging.warning(f"Fix for {error_id} not a string or missing valid try/except—skipping fix.")
                         fix = None
 
-                # Force reviewer call with fallback
+                # Force reviewer call even if fix parsing is partial
                 reviewed_fix = None
-                if fix:
+                if fix is not None:  # Changed from 'if fix' to handle potential empty strings
                     review_prompt = (
-                        f"Please review this response: {fix}. Strip all prose, test cases, <think> blocks, and irrelevant code. "
+                        f"Please review this response: {fix if fix.strip() else 'def placeholder(): pass'}. Strip all prose, test cases, <think> blocks, and irrelevant code. "
                         f"Return ONLY the COMPLETE fixed function in Python using a FULL try/except block with the appropriate except clause "
                         f"to handle the error ({error}), returning None, with NO extra logic, NO prose, and NO explanations, inside ```python ... ```."
                     )
                     reviewed_fix = self.agent_manager.delegate_task("reviewer", review_prompt, timeout=300)
                     logging.debug(f"Debug: Reviewed fix for {error_id}: {reviewed_fix}")
 
-                final_fix = fix if fix else None  # Ensure final_fix is set to fix if valid
+                final_fix = fix if fix and fix.strip() else None  # Default to fix if valid, otherwise None
                 if reviewed_fix and isinstance(reviewed_fix, str) and reviewed_fix.strip():
                     if "```python" in reviewed_fix:
                         try:
                             reviewed_fix = re.search(r"```python\s*(.*?)\s*```", reviewed_fix, re.DOTALL).group(1).strip()
-                            raw_func = re.search(r"def\s+(\w+)\s*\(.*?\):.*?(try:.*?except\s+(?:ZeroDivisionError|KeyError):.*?return\s+None)", reviewed_fix, re.DOTALL | re.MULTILINE)
+                            raw_func = re.search(r"def\s+(\w+)\s*$$ .*? $$:.*?(try:.*?except\s+(?:ZeroDivisionError|KeyError):.*?return\s+None)", reviewed_fix, re.DOTALL | re.MULTILINE)
                             if raw_func:
                                 final_fix = raw_func.group(0).strip()
                             else:
@@ -288,7 +296,7 @@ def authenticate_user(user_data):
                         except AttributeError:
                             logging.warning(f"Reviewed fix for {error_id} not in expected ```python``` format—using original fix.")
                     else:
-                        raw_func = re.search(r"def\s+(\w+)\s*\(.*?\):.*?(try:.*?except\s+(?:ZeroDivisionError|KeyError):.*?return\s+None)", reviewed_fix, re.DOTALL | re.MULTILINE)
+                        raw_func = re.search(r"def\s+(\w+)\s*$$ .*? $$:.*?(try:.*?except\s+(?:ZeroDivisionError|KeyError):.*?return\s+None)", reviewed_fix, re.DOTALL | re.MULTILINE)
                         if raw_func:
                             final_fix = raw_func.group(0).strip()
                         else:
@@ -307,7 +315,7 @@ def authenticate_user(user_data):
                         original_content = f.read()
                     with open(temp_script_path, "w") as f:
                         # Replace only the original function with final_fix
-                        func_match = re.search(r"def\s+\w+\s*\(.*?\):.*?(?=\n\n|\Z)", original_content, re.DOTALL)
+                        func_match = re.search(r"def\s+\w+\s*$$ .*? $$:.*?(?=\n\n|\Z)", original_content, re.DOTALL)
                         if func_match:
                             f.write(original_content.replace(func_match.group(0), final_fix) + "\n")
                         else:
