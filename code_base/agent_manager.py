@@ -62,7 +62,6 @@ class AgentManager:
             logging.debug(f"Original script content: {script_content}")
 
             # Extract only the first function definition as the fixed function
-            # Improved regex to capture the entire function body until dedentation
             func_match = re.search(r"def\s+(\w+)\s*\((.*?)\):\n((\s+.*\n)+)(?=(?:def\s+\w+\s*\(|$))", script_content, re.MULTILINE)
             if not func_match:
                 logging.error("No function definition found in script")
@@ -75,7 +74,9 @@ class AgentManager:
                 logging.error("Function body is empty")
                 return False, "Function body is empty"
             # Reconstruct the fixed function with proper indentation
-            fixed_function = f"def {func_name}({func_args}):\n" + func_body
+            # Indent the body by 4 spaces to align with Python convention
+            indented_body = "\n".join("    " + line for line in func_body.splitlines())
+            fixed_function = f"def {func_name}({func_args}):\n{indented_body}"
             logging.debug(f"Extracted function name: {func_name}, fixed function: {fixed_function}")
 
             # Create a test script with the properly formatted fixed function
