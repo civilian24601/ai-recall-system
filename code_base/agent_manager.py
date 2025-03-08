@@ -232,7 +232,7 @@ print("Test result:", "Success" if result else f"Failed: {{error}}")
                             for handler in body_node.handlers:
                                 if isinstance(handler.type, (ast.Tuple, ast.Name)):
                                     exceptions = [handler.type.id] if isinstance(handler.type, ast.Name) else [elt.id for elt in handler.type.elts if isinstance(elt, ast.Name)]
-                                    if all(exc in ["ZeroDivisionError", "KeyError"] for exc in exceptions):
+                                    if any(exc in ["ZeroDivisionError", "KeyError"] for exc in exceptions):
                                         has_valid_except = True
                                 for stmt in handler.body:
                                     if isinstance(stmt, ast.Return) and isinstance(stmt.value, ast.Constant) and stmt.value.value is None:

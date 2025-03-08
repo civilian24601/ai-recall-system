@@ -264,7 +264,7 @@ def authenticate_user(user_data):
                             if raw_func:
                                 final_fix = raw_func.group(0).strip()
                             else:
-                                logging.warning(f"Reviewed fix for {error_id} missing valid try/except—using original fix.")
+                                logging.warning(f"Reviewed fix for {error_id} missing valid try/except after parsing—using original fix.")
                         except AttributeError:
                             logging.warning(f"Reviewed fix for {error_id} not in expected ```python``` format—using original fix.")
                     else:
@@ -314,7 +314,8 @@ def authenticate_user(user_data):
                     log_data = json.loads(log_result["documents"][0]) if log_result["documents"] else {}
                     success = log_data.get("success", False)
                     
-                    resolved = fix_works
+                    # Update resolved based on fix_works
+                    resolved = fix_works if fix_works is not None else log.get("resolved", False)
                     
                     log_entry = {
                         "id": error_id,
