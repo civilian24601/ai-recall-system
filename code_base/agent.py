@@ -300,7 +300,7 @@ def authenticate_user(user_data):
                 logging.debug(f"Calling run_blueprint for {error_id} with original_error: {error}, script_path: {script_path}")
 
                 blueprint_id = f"bp_fix_{error_id}"
-                execution_trace_id = self.blueprint_executor.run_blueprint(
+                execution_trace_id, validation_result = self.blueprint_executor.run_blueprint(
                     blueprint_id=blueprint_id,
                     task_name="Apply fix",
                     script_path=script_path,
@@ -310,12 +310,14 @@ def authenticate_user(user_data):
                 )
                 
                 if execution_trace_id:
+                    fix_works = validation_result.get("fix_works", False)
+                    fix_error = validation_result.get("fix_error", "No validation performed")
                     log_result = self.collections["execution_logs"].get(ids=[execution_trace_id])
                     log_data = json.loads(log_result["documents"][0]) if log_result["documents"] else {}
                     success = log_data.get("success", False)
                     
-                    # Update resolved based on fix_works
-                    resolved = fix_works if fix_works is not None else log.get("resolved", False)
+                    # Update resolved based on fix_works from validation_result
+                    resolved = fix_works
                     
                     log_entry = {
                         "id": error_id,

@@ -74,7 +74,8 @@ class BlueprintExecution:
         """Executes a blueprint task, logs BELog, evolves if improved."""
         print(f"⚙️ Running blueprint {blueprint_id}: {task_name}")
         
-        logging.debug(f"Entering run_blueprint with blueprint_id: {blueprint_id}, task_name: {task_name}, script_path: {script_path}, final_fix: {final_fix}, original_error: {original_error}")
+        logging.debug(f"Entering run_blueprint with blueprint_id: {blueprint_id}, task_name: {task_name}, script_path: {script_path}, "
+                     f"final_fix: {final_fix}, original_error: {original_error}")
 
         start_time = time.time()
         temp_script_path = script_path + ".tmp"
@@ -157,7 +158,7 @@ class BlueprintExecution:
             
             self.evolve_blueprint(blueprint_id, execution_trace_id, success)
             logging.debug(f"Completed run_blueprint for {blueprint_id}, returning execution_trace_id: {execution_trace_id}")
-            return execution_trace_id
+            return execution_trace_id, {"fix_works": fix_works, "fix_error": fix_error if not fix_works else ""}
         except Exception as e:
             print(f"⚠️ Blueprint execution failed: {e}")
             logging.error(f"Exception in run_blueprint: {e}, traceback: {traceback.format_exc()}")
@@ -178,7 +179,7 @@ class BlueprintExecution:
                 success=False,
                 efficiency_score=10,
                 improvement_suggestions="Debug execution failure"
-            )
+            ), {"fix_works": False, "fix_error": str(e)}
 
     def log_execution(self, blueprint_id, task_name, execution_context, expected_outcome, execution_time, files_changed, dependencies, pipeline_connections, errors, success, efficiency_score, improvement_suggestions):
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
