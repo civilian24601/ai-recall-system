@@ -36,11 +36,10 @@ try:
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
             logging.StreamHandler(sys.stdout),
-            logging.FileHandler(f"{log_dir}/agent_debug.log", mode='a')  # Changed to 'a' for append
+            logging.FileHandler(f"{log_dir}/agent_debug.log", mode='a')
         ]
     )
     logging.debug("Logging initialized successfully for agent.py")
-    # Verify file handler is working
     with open(f"{log_dir}/agent_debug.log", "a") as f:
         f.write("Test write to verify file handler\n")
 except Exception as e:
@@ -230,22 +229,11 @@ def authenticate_user(user_data):
                 if fix and "```python" in fix:
                     try:
                         fix = re.search(r"```python\s*(.*?)\s*```", fix, re.DOTALL).group(1).strip()
-                        raw_func = re.search(r"def\s+(\w+)\s*$$ .*? $$:.*?(try:.*?except\s+(?:ZeroDivisionError|KeyError):.*?return\s+None)", fix, re.DOTALL | re.MULTILINE)
-                        if raw_func:
-                            fix = raw_func.group(0).strip()
-                        else:
-                            logging.warning(f"Fix for {error_id} missing valid try/except after parsing—using raw response.")
-                            fix = re.search(r"```python\s*(.*?)\s*```", fix, re.DOTALL).group(1).strip() if "```python" in fix else fix
                     except AttributeError:
                         logging.warning(f"Fix for {error_id} not in expected ```python``` format—using raw response.")
                         fix = fix if isinstance(fix, str) else None
                 else:
-                    raw_func = re.search(r"def\s+(\w+)\s*\(.*?\):.*?(try:.*?except\s+(?:ZeroDivisionError|KeyError):.*?return\s+None)", fix, re.DOTALL | re.MULTILINE)
-                    if raw_func:
-                        fix = raw_func.group(0).strip()
-                    else:
-                        logging.warning(f"Fix for {error_id} not a string or missing valid try/except—using raw response if possible.")
-                        fix = fix if isinstance(fix, str) and fix.strip() else None
+                    fix = fix if isinstance(fix, str) and fix.strip() else None
 
                 reviewed_fix = None
                 if fix is not None:
@@ -262,19 +250,11 @@ def authenticate_user(user_data):
                     if "```python" in reviewed_fix:
                         try:
                             reviewed_fix = re.search(r"```python\s*(.*?)\s*```", reviewed_fix, re.DOTALL).group(1).strip()
-                            raw_func = re.search(r"def\s+(\w+)\s*$$ .*? $$:.*?(try:.*?except\s+(?:ZeroDivisionError|KeyError):.*?return\s+None)", reviewed_fix, re.DOTALL | re.MULTILINE)
-                            if raw_func:
-                                final_fix = raw_func.group(0).strip()
-                            else:
-                                logging.warning(f"Reviewed fix for {error_id} missing valid try/except after parsing—using original fix.")
+                            final_fix = reviewed_fix
                         except AttributeError:
                             logging.warning(f"Reviewed fix for {error_id} not in expected ```python``` format—using original fix.")
                     else:
-                        raw_func = re.search(r"def\s+(\w+)\s*$$ .*? $$:.*?(try:.*?except\s+(?:ZeroDivisionError|KeyError):.*?return\s+None)", reviewed_fix, re.DOTALL | re.MULTILINE)
-                        if raw_func:
-                            final_fix = raw_func.group(0).strip()
-                        else:
-                            logging.warning(f"Reviewed fix for {error_id} missing valid try/except—using original fix.")
+                        final_fix = reviewed_fix
 
                 logging.debug(f"Debug: Final fix for {error_id}: {final_fix}")
 
@@ -291,7 +271,7 @@ def authenticate_user(user_data):
                     with open(temp_script_path, "r") as f:
                         original_content = f.read()
                     with open(temp_script_path, "w") as f:
-                        func_match = re.search(r"def\s+\w+\s*$$ .*? $$:.*?(?=\n\n|\Z)", original_content, re.DOTALL)
+                        func_match = re.search(r"def\s+\w+\s*\(.*?\):.*?(?=\n\n|\Z)", original_content, re.DOTALL)
                         if func_match:
                             f.write(original_content.replace(func_match.group(0), final_fix) + "\n")
                         else:

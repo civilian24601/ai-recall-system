@@ -19,11 +19,10 @@ try:
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
             logging.StreamHandler(sys.stdout),
-            logging.FileHandler(f"{log_dir}/agent_manager_debug.log", mode='a')  # Changed to 'a' for append
+            logging.FileHandler(f"{log_dir}/agent_manager_debug.log", mode='a')
         ]
     )
     logging.debug("Logging initialized successfully for agent_manager.py")
-    # Verify file handler is working
     with open(f"{log_dir}/agent_manager_debug.log", "a") as f:
         f.write("Test write to verify file handler\n")
 except Exception as e:
@@ -62,19 +61,20 @@ class AgentManager:
                 script_content = f.read()
             logging.debug(f"Original script content: {script_content}")
 
-            # Extract the fixed function (last definition in the file)
-            func_match = re.search(r"def\s+(\w+)\s*\(.*?\):.*?(?=\n\n|\Z)", script_content, re.DOTALL)
+            # Extract only the fixed function (the first definition, as the script should only contain the fixed version)
+            func_match = re.search(r"(def\s+\w+\s*\(.*?\):.*?(?=\n\n|\Z))", script_content, re.DOTALL)
             if not func_match:
                 logging.error("No function definition found in script")
                 return False, "No function definition found"
-            func_name = func_match.group(1)
-            logging.debug(f"Extracted function name: {func_name}")
+            fixed_function = func_match.group(1).strip()
+            func_name = re.search(r"def\s+(\w+)\s*\(", fixed_function).group(1)
+            logging.debug(f"Extracted function name: {func_name}, fixed function: {fixed_function}")
 
             # Create a test script with only the fixed function
             test_code = f"""
 import sys
 from io import StringIO
-{func_match.group(0).strip()}  # Use only the fixed function
+{fixed_function}
 def run_test():
     original_stdout = sys.stdout
     sys.stdout = StringIO()
