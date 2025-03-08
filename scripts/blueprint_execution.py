@@ -23,14 +23,27 @@ sys.path.append(PARENT_DIR)
 from code_base.agent_manager import AgentManager
 
 # Configure logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler("/mnt/f/projects/ai-recall-system/logs/blueprint_debug.log", mode='w')
-    ]
-)
+try:
+    log_dir = "/mnt/f/projects/ai-recall-system/logs"
+    os.makedirs(log_dir, exist_ok=True)
+    
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(sys.stdout),
+            logging.FileHandler(f"{log_dir}/blueprint_debug.log", mode='w')
+        ]
+    )
+    logging.debug("Logging initialized successfully for blueprint_execution.py")
+except Exception as e:
+    print(f"⚠️ Failed to initialize logging for blueprint_execution.py: {e}")
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[logging.StreamHandler(sys.stdout)]
+    )
+    logging.warning("Falling back to console-only logging due to file handler error")
 
 class BlueprintExecution:
     def __init__(self, agent_manager=None, test_mode=False, collections=None):
@@ -98,7 +111,6 @@ class BlueprintExecution:
                     logging.error(f"Validation failed for {script_path}: {e}, traceback: {traceback.format_exc()}")
                     fix_error = str(e)
                 finally:
-                    # Log the result even if an exception occurs
                     logging.debug(f"Final validation result: fix_works={fix_works}, fix_error={fix_error}")
                 
                 if fix_works:

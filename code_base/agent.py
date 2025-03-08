@@ -28,14 +28,27 @@ from scripts.index_codebase import reindex_single_file
 from scripts.blueprint_execution import BlueprintExecution
 
 # Configure logging with both console and file handlers
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout),  # Console output
-        logging.FileHandler("/mnt/f/projects/ai-recall-system/logs/agent_debug.log", mode='w')  # File output
-    ]
-)
+try:
+    log_dir = "/mnt/f/projects/ai-recall-system/logs"
+    os.makedirs(log_dir, exist_ok=True)
+    
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(sys.stdout),
+            logging.FileHandler(f"{log_dir}/agent_debug.log", mode='w')
+        ]
+    )
+    logging.debug("Logging initialized successfully for agent.py")
+except Exception as e:
+    print(f"⚠️ Failed to initialize logging for agent.py: {e}")
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[logging.StreamHandler(sys.stdout)]
+    )
+    logging.warning("Falling back to console-only logging due to file handler error")
 
 class BuildAgent:
     def __init__(self, project_dir="/mnt/f/projects/ai-recall-system", test_mode=False):

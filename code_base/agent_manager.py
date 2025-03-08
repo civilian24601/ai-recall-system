@@ -3,21 +3,36 @@ import re
 import os
 import ast
 import subprocess
-import traceback  # Added for detailed error logging
+import traceback
 import sys
-import logging  # Added for logging
+import logging
 from io import StringIO
 from code_base.network_utils import detect_api_url
 
 # Configure logging for agent_manager.py
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler("/mnt/f/projects/ai-recall-system/logs/agent_manager_debug.log", mode='w')
-    ]
-)
+try:
+    # Ensure the logs directory exists
+    log_dir = "/mnt/f/projects/ai-recall-system/logs"
+    os.makedirs(log_dir, exist_ok=True)
+    
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(sys.stdout),
+            logging.FileHandler(f"{log_dir}/agent_manager_debug.log", mode='w')
+        ]
+    )
+    logging.debug("Logging initialized successfully for agent_manager.py")
+except Exception as e:
+    print(f"⚠️ Failed to initialize logging for agent_manager.py: {e}")
+    # Fallback to console-only logging
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[logging.StreamHandler(sys.stdout)]
+    )
+    logging.warning("Falling back to console-only logging due to file handler error")
 
 class AgentManager:
     """Manages AI Agents for architecture, coding, review, and automation with simplified prompts and lighter models."""
@@ -68,7 +83,7 @@ def run_test():
         elif "{func_name}" == "authenticate_user":
             result = {func_name}({{'password': 'secure123'}})
         sys.stdout = original_stdout
-        return result is None  # Expect None for error handling
+        return True, "" if result is None else False, "Expected None but got a value"
     except Exception as e:
         sys.stdout = original_stdout
         return False, str(e)
@@ -86,10 +101,10 @@ print("Test result:", "Success" if result else f"Failed: {{error}}")
             # Execute the test script using subprocess (use 'python' for WSL compatibility)
             try:
                 process = subprocess.run(
-                    ["python", temp_test_path],  # Changed from python3 to python
+                    ["python", temp_test_path],
                     capture_output=True,
                     text=True,
-                    timeout=30  # Increased timeout to 30s
+                    timeout=30
                 )
                 logging.debug(f"Subprocess completed: returncode={process.returncode}, stdout={process.stdout}, stderr={process.stderr}")
             except subprocess.TimeoutExpired as e:
