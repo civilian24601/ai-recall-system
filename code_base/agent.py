@@ -275,6 +275,9 @@ def authenticate_user(user_data):
                         else:
                             f.write(final_fix + "\n" + original_content)
 
+                # Log the value of error before calling run_blueprint
+                logging.debug(f"Calling run_blueprint for {error_id} with original_error: {error}, script_path: {script_path}")
+
                 blueprint_id = f"bp_fix_{error_id}"
                 execution_trace_id = self.blueprint_executor.run_blueprint(
                     blueprint_id=blueprint_id,
@@ -282,7 +285,7 @@ def authenticate_user(user_data):
                     script_path=script_path,
                     execution_context=context,
                     final_fix=final_fix,
-                    original_error=error
+                    original_error=error if error else "Unknown error"  # Ensure original_error is not None
                 )
                 
                 if execution_trace_id:

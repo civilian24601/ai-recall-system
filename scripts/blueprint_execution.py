@@ -56,34 +56,39 @@ class BlueprintExecution:
         start_time = time.time()
         temp_script_path = script_path + ".tmp"
         try:
+            logging.debug(f"Starting blueprint execution for task '{task_name}' with script_path: {script_path}, original_error: {original_error}")
+
             if task_name == "Apply fix":
                 if not final_fix:
                     raise ValueError("final_fix is required for 'Apply fix' task")
                 
                 # Apply the final_fix to the original script
+                logging.debug(f"Copying script {script_path} to temp file {temp_script_path}")
                 shutil.copy(script_path, temp_script_path)
                 with open(temp_script_path, "r") as f:
                     original_content = f.read()
+                logging.debug(f"Original content of {temp_script_path}: {original_content}")
                 with open(temp_script_path, "w") as f:
-                    func_match = re.search(r"def\s+\w+\s*\(.*?\):.*?(?=\n\n|\Z)", original_content, re.DOTALL)
+                    func_match = re.search(r"def\s+\w+\s*$$ .*? $$:.*?(?=\n\n|\Z)", original_content, re.DOTALL)
                     if func_match:
                         f.write(original_content.replace(func_match.group(0), final_fix) + "\n")
                     else:
                         f.write(final_fix + "\n" + original_content)
+                logging.debug(f"Updated content of {temp_script_path} with fix: {final_fix}")
 
                 # Validate the fix using AgentManager's test_fix with debug logging
                 logging.debug(f"Validating fix for {script_path} with original_error: {original_error}")
                 fix_works = False
                 fix_error = "No validation performed"
-                if original_error:
-                    try:
-                        fix_works, fix_error = self.agent_manager.test_fix(temp_script_path, original_error)
-                        logging.debug(f"Validation result for {script_path}: fix_works={fix_works}, fix_error={fix_error}")
-                    except Exception as e:
-                        logging.error(f"Validation failed for {script_path}: {e}")
-                        fix_error = str(e)
+                try:
+                    fix_works, fix_error = self.agent_manager.test_fix(temp_script_path, original_error)
+                    logging.debug(f"Validation result for {script_path}: fix_works={fix_works}, fix_error={fix_error}")
+                except Exception as e:
+                    logging.error(f"Validation failed for {script_path}: {e}")
+                    fix_error = str(e)
                 
                 if fix_works:
+                    logging.debug(f"Validation passed, applying fix by moving {temp_script_path} to {script_path}")
                     shutil.move(temp_script_path, script_path)
                     logging.info(f"Applied valid fix to {script_path}")
                     task_result = final_fix
