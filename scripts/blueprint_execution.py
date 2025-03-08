@@ -14,6 +14,7 @@ import time
 import chromadb
 import logging
 import shutil
+import re  # Added import for regex
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PARENT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
@@ -65,7 +66,7 @@ class BlueprintExecution:
                     original_content = f.read()
                 with open(temp_script_path, "w") as f:
                     # Replace the original function with final_fix
-                    func_match = re.search(r"def\s+\w+\s*\(.*?\):.*?(?=\n\n|\Z)", original_content, re.DOTALL)
+                    func_match = re.search(r"def\s+\w+\s*$$ .*? $$:.*?(?=\n\n|\Z)", original_content, re.DOTALL)
                     if func_match:
                         f.write(original_content.replace(func_match.group(0), final_fix) + "\n")
                     else:
