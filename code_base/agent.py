@@ -27,7 +27,15 @@ from scripts.aggregator_search import aggregator_search
 from scripts.index_codebase import reindex_single_file
 from scripts.blueprint_execution import BlueprintExecution
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+# Configure logging with both console and file handlers
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),  # Console output
+        logging.FileHandler("/mnt/f/projects/ai-recall-system/logs/agent_debug.log", mode='w')  # File output
+    ]
+)
 
 class BuildAgent:
     def __init__(self, project_dir="/mnt/f/projects/ai-recall-system", test_mode=False):
@@ -285,7 +293,7 @@ def authenticate_user(user_data):
                     script_path=script_path,
                     execution_context=context,
                     final_fix=final_fix,
-                    original_error=error if error else "Unknown error"  # Ensure original_error is not None
+                    original_error=error if error else "Unknown error"
                 )
                 
                 if execution_trace_id:

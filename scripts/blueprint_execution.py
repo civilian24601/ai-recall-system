@@ -22,7 +22,15 @@ sys.path.append(PARENT_DIR)
 
 from code_base.agent_manager import AgentManager
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+# Configure logging with both console and file handlers
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler("/mnt/f/projects/ai-recall-system/logs/blueprint_debug.log", mode='w')
+    ]
+)
 
 class BlueprintExecution:
     def __init__(self, agent_manager=None, test_mode=False, collections=None):
@@ -53,6 +61,8 @@ class BlueprintExecution:
         """Executes a blueprint task, logs BELog, evolves if improved."""
         print(f"⚙️ Running blueprint {blueprint_id}: {task_name}")
         
+        logging.debug(f"Entering run_blueprint with blueprint_id: {blueprint_id}, task_name: {task_name}, script_path: {script_path}, final_fix: {final_fix}, original_error: {original_error}")
+
         start_time = time.time()
         temp_script_path = script_path + ".tmp"
         try:
@@ -60,6 +70,7 @@ class BlueprintExecution:
 
             if task_name == "Apply fix":
                 if not final_fix:
+                    logging.error("final_fix is required for 'Apply fix' task")
                     raise ValueError("final_fix is required for 'Apply fix' task")
                 
                 # Apply the final_fix to the original script
@@ -101,6 +112,7 @@ class BlueprintExecution:
                     task_result = None
                     success = False
             else:
+                logging.debug(f"Task '{task_name}' is not 'Apply fix', delegating to engineer")
                 task_result = self.agent_manager.delegate_task(
                     "engineer",
                     f"Execute task '{task_name}' on script {script_path} with context: {execution_context}",
@@ -112,6 +124,7 @@ class BlueprintExecution:
             errors = "None" if task_result and "def placeholder" not in task_result else "Task execution failed" if not success else "None"
             efficiency_score = int(100 - (execution_time * 10)) if success else 20
             
+            logging.debug(f"Logging execution result: success={success}, errors={errors}, efficiency_score={efficiency_score}")
             execution_trace_id = self.log_execution(
                 blueprint_id=blueprint_id,
                 task_name=task_name,
@@ -128,9 +141,11 @@ class BlueprintExecution:
             )
             
             self.evolve_blueprint(blueprint_id, execution_trace_id, success)
+            logging.debug(f"Completed run_blueprint for {blueprint_id}, returning execution_trace_id: {execution_trace_id}")
             return execution_trace_id
         except Exception as e:
             print(f"⚠️ Blueprint execution failed: {e}")
+            logging.error(f"Exception in run_blueprint: {e}, traceback: {traceback.format_exc()}")
             if os.path.exists(temp_script_path):
                 os.remove(temp_script_path)
                 logging.debug(f"Cleaned up temp file after failure: {temp_script_path}")
