@@ -111,7 +111,7 @@ class BuildAgent:
             context = "\n".join(guidelines_context[:1] + code_context[:2])
             if not context:
                 logging.warning(f"No relevant context (guidelines or Python code) found for query: {query}")
-                guidelines_results = aggregator_search(query, top_n=1, mode="guidelines")
+                guidelines_results = aggregator_search(query, top_n=1, mode="guidelines_code")
                 guidelines_context = [r["document"] for r in guidelines_results if r.get("metadata", {}).get("filename") == "ai_coding_guidelines.md"]
                 context = "\n".join(guidelines_context[:1])[:1000] if guidelines_context else ""
                 if not context:
@@ -152,7 +152,7 @@ def authenticate_user(user_data):
 
         with open(self.debug_log_file, "w") as f:
             json.dump(debug_logs, f, indent=4)
-
+        logging.debug(f"Reset debug logs to: {json.dumps(debug_logs, indent=4)}")
         logging.info("Reset test scripts and debug logs to initial states.")
 
     def run(self):
@@ -296,7 +296,6 @@ def authenticate_user(user_data):
                         else:
                             f.write(final_fix + "\n" + original_content)
 
-                # Log the value of error before calling run_blueprint
                 logging.debug(f"Calling run_blueprint for {error_id} with original_error: {error}, script_path: {script_path}")
 
                 blueprint_id = f"bp_fix_{error_id}"
@@ -316,7 +315,6 @@ def authenticate_user(user_data):
                     log_data = json.loads(log_result["documents"][0]) if log_result["documents"] else {}
                     success = log_data.get("success", False)
                     
-                    # Update resolved based on fix_works from validation_result
                     resolved = fix_works
                     
                     log_entry = {
@@ -340,13 +338,14 @@ def authenticate_user(user_data):
                     logs = [l if l["id"] != error_id else log_entry for l in logs]
                     with open(self.debug_log_file, "w") as f:
                         json.dump(logs, f, indent=4)
+                    logging.debug(f"Updated debug logs for {error_id}: {json.dumps(log_entry, indent=4)}")
 
             if attempt_count >= self.max_attempts:
                 logging.error("Max attempts reached for unresolved issues—exiting.")
                 break
 
-        self.reset_state()
         logging.info("Completed run and reset state for next test.")
+        self.reset_state()
 
 if __name__ == "__main__":
     agent = BuildAgent(test_mode=True)

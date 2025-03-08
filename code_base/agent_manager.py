@@ -11,7 +11,6 @@ from code_base.network_utils import detect_api_url
 
 # Configure logging for agent_manager.py
 try:
-    # Ensure the logs directory exists
     log_dir = "/mnt/f/projects/ai-recall-system/logs"
     os.makedirs(log_dir, exist_ok=True)
     
@@ -26,7 +25,6 @@ try:
     logging.debug("Logging initialized successfully for agent_manager.py")
 except Exception as e:
     print(f"⚠️ Failed to initialize logging for agent_manager.py: {e}")
-    # Fallback to console-only logging
     logging.basicConfig(
         level=logging.DEBUG,
         format='%(asctime)s - %(levelname)s - %(message)s',
@@ -57,12 +55,10 @@ class AgentManager:
         """Test if the fix handles the original error."""
         logging.debug(f"Starting test_fix for script_path: {script_path}, original_error: {original_error}")
         try:
-            # Read the script content
             with open(script_path, "r") as f:
                 script_content = f.read()
             logging.debug(f"Script content: {script_content}")
 
-            # Extract function name
             func_match = re.search(r"def\s+(\w+)\s*\(", script_content)
             if not func_match:
                 logging.error("No function definition found in script")
@@ -70,7 +66,6 @@ class AgentManager:
             func_name = func_match.group(1)
             logging.debug(f"Extracted function name: {func_name}")
 
-            # Generate test code
             test_code = f"""
 import sys
 from io import StringIO
@@ -93,13 +88,11 @@ print("Test result:", "Success" if result else f"Failed: {{error}}")
 """
             logging.debug(f"Generated test code: {test_code}")
 
-            # Write test script to a temporary file
             temp_test_path = script_path + ".test"
             with open(temp_test_path, "w") as f:
                 f.write(script_content + "\n" + test_code)
             logging.debug(f"Wrote test script to: {temp_test_path}")
 
-            # Execute the test script using subprocess (use 'python' for WSL compatibility)
             try:
                 process = subprocess.run(
                     ["python", temp_test_path],
@@ -121,12 +114,10 @@ print("Test result:", "Success" if result else f"Failed: {{error}}")
                     logging.debug(f"Cleaned up test script after subprocess error: {temp_test_path}")
                 return False, f"Subprocess error: {str(e)}"
 
-            # Clean up
             if os.path.exists(temp_test_path):
                 os.remove(temp_test_path)
                 logging.debug(f"Cleaned up test script: {temp_test_path}")
 
-            # Check result
             output = process.stdout.strip()
             logging.debug(f"Subprocess output: {output}")
             if "Test result: Success" in output:
