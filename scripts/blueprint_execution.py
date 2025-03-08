@@ -22,7 +22,7 @@ sys.path.append(PARENT_DIR)
 
 from code_base.agent_manager import AgentManager
 
-# Configure logging with both console and file handlers
+# Configure logging
 logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -80,7 +80,7 @@ class BlueprintExecution:
                     original_content = f.read()
                 logging.debug(f"Original content of {temp_script_path}: {original_content}")
                 with open(temp_script_path, "w") as f:
-                    func_match = re.search(r"def\s+\w+\s*$$ .*? $$:.*?(?=\n\n|\Z)", original_content, re.DOTALL)
+                    func_match = re.search(r"def\s+\w+\s*\(.*?\):.*?(?=\n\n|\Z)", original_content, re.DOTALL)
                     if func_match:
                         f.write(original_content.replace(func_match.group(0), final_fix) + "\n")
                     else:
@@ -95,8 +95,11 @@ class BlueprintExecution:
                     fix_works, fix_error = self.agent_manager.test_fix(temp_script_path, original_error)
                     logging.debug(f"Validation result for {script_path}: fix_works={fix_works}, fix_error={fix_error}")
                 except Exception as e:
-                    logging.error(f"Validation failed for {script_path}: {e}")
+                    logging.error(f"Validation failed for {script_path}: {e}, traceback: {traceback.format_exc()}")
                     fix_error = str(e)
+                finally:
+                    # Log the result even if an exception occurs
+                    logging.debug(f"Final validation result: fix_works={fix_works}, fix_error={fix_error}")
                 
                 if fix_works:
                     logging.debug(f"Validation passed, applying fix by moving {temp_script_path} to {script_path}")

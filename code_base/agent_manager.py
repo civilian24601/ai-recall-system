@@ -3,9 +3,21 @@ import re
 import os
 import ast
 import subprocess
-from io import StringIO
+import traceback  # Added for detailed error logging
 import sys
+import logging  # Added for logging
+from io import StringIO
 from code_base.network_utils import detect_api_url
+
+# Configure logging for agent_manager.py
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler("/mnt/f/projects/ai-recall-system/logs/agent_manager_debug.log", mode='w')
+    ]
+)
 
 class AgentManager:
     """Manages AI Agents for architecture, coding, review, and automation with simplified prompts and lighter models."""
@@ -28,14 +40,22 @@ class AgentManager:
 
     def test_fix(self, script_path, original_error):
         """Test if the fix handles the original error."""
+        logging.debug(f"Starting test_fix for script_path: {script_path}, original_error: {original_error}")
         try:
+            # Read the script content
             with open(script_path, "r") as f:
                 script_content = f.read()
+            logging.debug(f"Script content: {script_content}")
+
+            # Extract function name
             func_match = re.search(r"def\s+(\w+)\s*\(", script_content)
             if not func_match:
+                logging.error("No function definition found in script")
                 return False, "No function definition found"
             func_name = func_match.group(1)
+            logging.debug(f"Extracted function name: {func_name}")
 
+            # Generate test code
             test_code = f"""
 import sys
 from io import StringIO
@@ -55,25 +75,62 @@ def run_test():
 result, error = run_test()
 print("Test result:", "Success" if result else f"Failed: {{error}}")
 """
+            logging.debug(f"Generated test code: {test_code}")
+
+            # Write test script to a temporary file
             temp_test_path = script_path + ".test"
             with open(temp_test_path, "w") as f:
                 f.write(script_content + "\n" + test_code)
-            result = subprocess.run(
-                ["python3", temp_test_path],
-                capture_output=True, text=True, timeout=10
-            )
-            os.remove(temp_test_path)
-            output = result.stdout.strip()
+            logging.debug(f"Wrote test script to: {temp_test_path}")
+
+            # Execute the test script using subprocess (use 'python' for WSL compatibility)
+            try:
+                process = subprocess.run(
+                    ["python", temp_test_path],  # Changed from python3 to python
+                    capture_output=True,
+                    text=True,
+                    timeout=30  # Increased timeout to 30s
+                )
+                logging.debug(f"Subprocess completed: returncode={process.returncode}, stdout={process.stdout}, stderr={process.stderr}")
+            except subprocess.TimeoutExpired as e:
+                logging.error(f"Subprocess timeout: {e}")
+                if os.path.exists(temp_test_path):
+                    os.remove(temp_test_path)
+                    logging.debug(f"Cleaned up test script after timeout: {temp_test_path}")
+                return False, "Timeout: Script hung"
+            except subprocess.SubprocessError as e:
+                logging.error(f"Subprocess error: {e}, traceback: {traceback.format_exc()}")
+                if os.path.exists(temp_test_path):
+                    os.remove(temp_test_path)
+                    logging.debug(f"Cleaned up test script after subprocess error: {temp_test_path}")
+                return False, f"Subprocess error: {str(e)}"
+
+            # Clean up
+            if os.path.exists(temp_test_path):
+                os.remove(temp_test_path)
+                logging.debug(f"Cleaned up test script: {temp_test_path}")
+
+            # Check result
+            output = process.stdout.strip()
+            logging.debug(f"Subprocess output: {output}")
             if "Test result: Success" in output:
+                logging.debug("Fix validated successfully")
                 return True, ""
-            return False, result.stderr or "Fix did not handle the original error"
-        except subprocess.TimeoutExpired:
-            return False, "Timeout: Script hung"
+            else:
+                error_msg = process.stderr or "Fix did not handle the original error"
+                logging.debug(f"Fix validation failed: {error_msg}")
+                return False, error_msg
+
         except Exception as e:
-            return False, str(e)
+            logging.error(f"Error in test_fix: {e}, traceback: {traceback.format_exc()}")
+            if 'temp_test_path' in locals() and os.path.exists(temp_test_path):
+                os.remove(temp_test_path)
+                logging.debug(f"Cleaned up test script after error: {temp_test_path}")
+            return False, f"Test execution failed: {str(e)}"
 
     def send_task(self, agent, task_prompt, timeout=300):
         model = self.agents.get(agent, "codestral-22b-v0.1")
+        logging.debug(f"Sending task to {agent} ({model}) with prompt: {task_prompt}")
         try:
             full_prompt = (
                 f"{task_prompt}\n\n"
@@ -101,13 +158,17 @@ print("Test result:", "Success" if result else f"Failed: {{error}}")
             else:
                 response_text = re.sub(r"<think>.*?</think>|\s*This solution:.*$", "", response_text, flags=re.DOTALL).strip()
             print(f"Raw response from {agent} ({model}): {response_text}")
+            logging.debug(f"Received response: {response_text}")
             return response_text if response_text else f"❌ Empty response from {agent} ({model})."
         except requests.exceptions.Timeout:
+            logging.error(f"Request timeout: {agent} ({model}) - {timeout}s")
             return f"❌ Timeout: {agent} ({model}) - {timeout}s"
         except requests.exceptions.RequestException as e:
+            logging.error(f"API error: {agent} ({model}) - {e}")
             return f"❌ API Error: {agent} ({model}) - {e}"
 
     def review_task(self, codestral_output, timeout=300):
+        logging.debug(f"Reviewing codestral output: {codestral_output}")
         review_prompt = (
             f"Review this: {codestral_output}. Return ONLY the COMPLETE fixed function in Python "
             "using a FULL try/except block for ZeroDivisionError or KeyError ONLY (use 'except (ZeroDivisionError, KeyError)' syntax), "
@@ -117,23 +178,24 @@ print("Test result:", "Success" if result else f"Failed: {{error}}")
         return self.send_task("reviewer", review_prompt, timeout)
 
     def preprocess_ai_response(self, ai_response):
+        logging.debug(f"Preprocessing AI response: {ai_response}")
         if self.retry_count >= self.max_retries:
-            print(f"⚠️ Max retries reached. Using fallback.")
+            logging.warning(f"Max retries reached. Using fallback.")
             return "def placeholder():\n    pass"
         
         if not ai_response or ai_response.startswith("❌"):
-            print(f"⚠️ Preprocessing failed: Empty or error:\n{ai_response}")
+            logging.warning(f"Preprocessing failed: Empty or error:\n{ai_response}")
             self.retry_count += 1
             return None
         
         if "<think>" in ai_response or any(prose in ai_response.lower() for prose in ["here's", "here is", "corrected", "fixed", "modified"]):
-            print(f"⚠️ Preprocessing warning: Prohibited content detected in:\n{ai_response}")
+            logging.warning(f"Prohibited content detected in:\n{ai_response}")
             self.retry_count += 1
             return None
 
         code_block = re.search(r"```(?:python)?\s*([\s\S]*?)\s*```", ai_response, re.DOTALL)
         if not code_block:
-            print(f"⚠️ No code block found in:\n{ai_response}")
+            logging.warning(f"No code block found in:\n{ai_response}")
             self.retry_count += 1
             return None
         code = code_block.group(1).strip()
@@ -163,37 +225,41 @@ print("Test result:", "Success" if result else f"Failed: {{error}}")
                                 if isinstance(stmt, (ast.Return, ast.Raise, ast.Expr)):
                                     continue
                         elif isinstance(body_node, ast.Raise):
-                            print(f"⚠️ Standalone raise statement found outside try/except in:\n{code}")
+                            logging.warning(f"Standalone raise statement found outside try/except in:\n{code}")
                             self.retry_count += 1
                             return None
                     if any(isinstance(n, ast.Expr) and isinstance(n.value, ast.Str) for n in node.body if not isinstance(n, ast.Try)):
-                        print(f"⚠️ Prose detected in function body:\n{code}")
+                        logging.warning(f"Prose detected in function body:\n{code}")
                         self.retry_count += 1
                         return None
                     if has_function and has_valid_try and has_valid_except and has_return_none:
                         self.retry_count = 0
+                        logging.debug(f"Preprocessing successful, returning code: {code}")
                         return code
             if not has_function:
-                print(f"⚠️ No function definition found in:\n{code}")
+                logging.warning(f"No function definition found in:\n{code}")
                 self.retry_count += 1
                 return None
-            print(f"⚠️ Missing try/except, invalid exceptions, or missing returns in:\n{code}")
+            logging.warning(f"Missing try/except, invalid exceptions, or missing returns in:\n{code}")
             self.retry_count += 1
             return None
-        except SyntaxError:
-            print(f"⚠️ Invalid Python syntax in:\n{code}")
+        except SyntaxError as e:
+            logging.warning(f"Invalid Python syntax in:\n{code}, error: {e}")
             self.retry_count += 1
             return None
 
     def delegate_task(self, agent, task_description, save_to=None, timeout=300):
+        logging.debug(f"Sending task to {agent}: {task_description} (Timeout: {timeout}s)")
         print(f"🔹 Sending task to {agent}: {task_description} (Timeout: {timeout}s)")
         result = self.send_task(agent, task_description, timeout)
         
         if not isinstance(result, str) or result.strip() == "" or result.startswith("❌"):
+            logging.warning(f"Invalid response for {agent}. Retrying...")
             print(f"❌ Invalid response for {agent}. Retrying...")
             result = self.send_task(agent, task_description, timeout + 60)
         
         if not isinstance(result, str) or result.strip() == "" or result.startswith("❌"):
+            logging.warning(f"Still invalid. Last try with strict mode...")
             print(f"❌ Still invalid. Last try with strict mode...")
             result = self.send_task(
                 agent,
@@ -202,27 +268,32 @@ print("Test result:", "Success" if result else f"Failed: {{error}}")
             )
         
         if not isinstance(result, str) or result.strip() == "" or result.startswith("❌") or result == "ERROR: No response.":
+            logging.error("Using fallback after max retries.")
             print("❌ Using fallback after max retries.")
             self.retry_count = 0
             return "def placeholder():\n    pass"
         
         if any(prose in result.lower() for prose in ["here's", "here is", "corrected", "fixed", "modified", "<think>"]):
             reviewed_fix = self.review_task(result, timeout)
+            logging.debug(f"Reviewer response for task: {reviewed_fix}")
             print(f"Debug: Reviewer response for task: {reviewed_fix}")
             if reviewed_fix and isinstance(reviewed_fix, str) and reviewed_fix.strip() and reviewed_fix != "ERROR: No valid function found.":
                 final_fix = self.preprocess_ai_response(reviewed_fix)
             else:
+                logging.warning(f"Review failed—using original.")
                 print(f"❌ Review failed—using original.")
                 final_fix = self.preprocess_ai_response(result)
         else:
             final_fix = self.preprocess_ai_response(result)
         
         if final_fix is None:
+            logging.error("Preprocessing failed. Using fallback.")
             print("❌ Preprocessing failed. Using fallback.")
             self.retry_count = 0
             return "def placeholder():\n    pass"
         
         self.retry_count = 0
+        logging.debug(f"Task completed successfully, final fix: {final_fix}")
         return final_fix
 
 if __name__ == "__main__":
