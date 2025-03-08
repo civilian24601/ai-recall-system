@@ -67,14 +67,22 @@ class AgentManager:
                 logging.error("No function definition found in script")
                 return False, "No function definition found"
             func_name = func_match.group(1)
-            fixed_function = f"def {func_name}({func_match.group(2)}):{func_match.group(3).strip()}"
+            func_args = func_match.group(2)
+            func_body = func_match.group(3).strip()
+            # Ensure the function body is properly indented
+            if not func_body:
+                logging.error("Function body is empty")
+                return False, "Function body is empty"
+            # Reconstruct the fixed function with proper indentation
+            fixed_function = f"def {func_name}({func_args}):\n    " + func_body.replace("\n", "\n    ")
             logging.debug(f"Extracted function name: {func_name}, fixed function: {fixed_function}")
 
-            # Create a test script with only the fixed function
+            # Create a test script with the properly formatted fixed function
             test_code = f"""
 import sys
 from io import StringIO
 {fixed_function}
+
 def run_test():
     original_stdout = sys.stdout
     sys.stdout = StringIO()
