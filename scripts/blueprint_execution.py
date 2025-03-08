@@ -14,7 +14,7 @@ import time
 import chromadb
 import logging
 import shutil
-import re  # Added import for regex
+import re
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PARENT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
@@ -54,25 +54,24 @@ class BlueprintExecution:
         print(f"⚙️ Running blueprint {blueprint_id}: {task_name}")
         
         start_time = time.time()
+        temp_script_path = script_path + ".tmp"
         try:
             if task_name == "Apply fix":
                 if not final_fix:
                     raise ValueError("final_fix is required for 'Apply fix' task")
                 
                 # Apply the final_fix to the original script
-                temp_script_path = script_path + ".tmp"
                 shutil.copy(script_path, temp_script_path)
                 with open(temp_script_path, "r") as f:
                     original_content = f.read()
                 with open(temp_script_path, "w") as f:
-                    # Replace the original function with final_fix
                     func_match = re.search(r"def\s+\w+\s*$$ .*? $$:.*?(?=\n\n|\Z)", original_content, re.DOTALL)
                     if func_match:
                         f.write(original_content.replace(func_match.group(0), final_fix) + "\n")
                     else:
                         f.write(final_fix + "\n" + original_content)
 
-                # Validate the fix
+                # Validate the fix using AgentManager's test_fix
                 fix_works, fix_error = self.agent_manager.test_fix(temp_script_path, original_error) if original_error else (False, "No original error provided")
                 
                 if fix_works:
@@ -81,7 +80,8 @@ class BlueprintExecution:
                     task_result = final_fix
                     success = True
                 else:
-                    os.remove(temp_script_path)
+                    if os.path.exists(temp_script_path):
+                        os.remove(temp_script_path)
                     logging.warning(f"Fix for {task_name} failed validation: {fix_error}—preserving original script.")
                     task_result = None
                     success = False
@@ -116,6 +116,9 @@ class BlueprintExecution:
             return execution_trace_id
         except Exception as e:
             print(f"⚠️ Blueprint execution failed: {e}")
+            if os.path.exists(temp_script_path):
+                os.remove(temp_script_path)
+                logging.debug(f"Cleaned up temp file after failure: {temp_script_path}")
             execution_time = time.time() - start_time
             return self.log_execution(
                 blueprint_id=blueprint_id,

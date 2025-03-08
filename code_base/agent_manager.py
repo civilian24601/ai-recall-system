@@ -2,6 +2,9 @@ import requests
 import re
 import os
 import ast
+import subprocess
+from io import StringIO
+import sys
 from code_base.network_utils import detect_api_url
 
 class AgentManager:
@@ -10,7 +13,7 @@ class AgentManager:
     def __init__(self):
         self.agents = {
             "engineer": "codestral-22b-v0.1",
-            "reviewer": "mistral-7b-instruct-v0.3",  # Updated to your downloaded model
+            "reviewer": "mistral-7b-instruct-v0.3",
             "architect": "codestral-22b-v0.1",
             "qa": "codestral-22b-v0.1",
             "devops": "codestral-22b-v0.1",
@@ -22,6 +25,52 @@ class AgentManager:
         self.code_dir = "/mnt/f/projects/ai-recall-system/code_base/agents/"
         self.retry_count = 0
         self.max_retries = 3
+
+    def test_fix(self, script_path, original_error):
+        """Test if the fix handles the original error."""
+        try:
+            with open(script_path, "r") as f:
+                script_content = f.read()
+            func_match = re.search(r"def\s+(\w+)\s*\(", script_content)
+            if not func_match:
+                return False, "No function definition found"
+            func_name = func_match.group(1)
+
+            test_code = f"""
+import sys
+from io import StringIO
+def run_test():
+    original_stdout = sys.stdout
+    sys.stdout = StringIO()
+    try:
+        if "{func_name}" == "divide":
+            result = {func_name}(10, 0)
+        elif "{func_name}" == "authenticate_user":
+            result = {func_name}({{'password': 'secure123'}})
+        sys.stdout = original_stdout
+        return result is None  # Expect None for error handling
+    except Exception as e:
+        sys.stdout = original_stdout
+        return False, str(e)
+result, error = run_test()
+print("Test result:", "Success" if result else f"Failed: {{error}}")
+"""
+            temp_test_path = script_path + ".test"
+            with open(temp_test_path, "w") as f:
+                f.write(script_content + "\n" + test_code)
+            result = subprocess.run(
+                ["python3", temp_test_path],
+                capture_output=True, text=True, timeout=10
+            )
+            os.remove(temp_test_path)
+            output = result.stdout.strip()
+            if "Test result: Success" in output:
+                return True, ""
+            return False, result.stderr or "Fix did not handle the original error"
+        except subprocess.TimeoutExpired:
+            return False, "Timeout: Script hung"
+        except Exception as e:
+            return False, str(e)
 
     def send_task(self, agent, task_prompt, timeout=300):
         model = self.agents.get(agent, "codestral-22b-v0.1")
@@ -39,14 +88,13 @@ class AgentManager:
                     "model": model,
                     "messages": [{"role": "user", "content": full_prompt}],
                     "max_tokens": 2048,
-                    "temperature": 0.01,  # Low temp for strict adherence
+                    "temperature": 0.01,
                     "top_p": 0.9
                 },
                 timeout=timeout
             )
             response.raise_for_status()
             response_text = response.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
-            # Extract only the code block, ensuring strict formatting
             code_match = re.search(r"```(?:python)?\s*([\s\S]*?)\s*```", response_text, re.DOTALL)
             if code_match:
                 response_text = f"```python\n{code_match.group(1).strip()}\n```"
@@ -83,7 +131,6 @@ class AgentManager:
             self.retry_count += 1
             return None
 
-        # Extract and validate code block
         code_block = re.search(r"```(?:python)?\s*([\s\S]*?)\s*```", ai_response, re.DOTALL)
         if not code_block:
             print(f"⚠️ No code block found in:\n{ai_response}")
@@ -91,7 +138,6 @@ class AgentManager:
             return None
         code = code_block.group(1).strip()
 
-        # Validate using AST
         try:
             tree = ast.parse(code)
             has_function = False
@@ -110,20 +156,16 @@ class AgentManager:
                                     exceptions = [handler.type.id] if isinstance(handler.type, ast.Name) else [elt.id for elt in handler.type.elts if isinstance(elt, ast.Name)]
                                     if all(exc in ["ZeroDivisionError", "KeyError"] for exc in exceptions):
                                         has_valid_except = True
-                                # Check return None in except
                                 for stmt in handler.body:
                                     if isinstance(stmt, ast.Return) and isinstance(stmt.value, ast.Constant) and stmt.value.value is None:
                                         has_return_none = True
-                            # Allow Raise, returns, and expressions in try block
                             for stmt in body_node.body:
                                 if isinstance(stmt, (ast.Return, ast.Raise, ast.Expr)):
-                                    continue  # Valid in try
-                        # Reject standalone Raise outside Try
+                                    continue
                         elif isinstance(body_node, ast.Raise):
                             print(f"⚠️ Standalone raise statement found outside try/except in:\n{code}")
                             self.retry_count += 1
                             return None
-                    # Reject prose or invalid structure (Str nodes outside Try)
                     if any(isinstance(n, ast.Expr) and isinstance(n.value, ast.Str) for n in node.body if not isinstance(n, ast.Try)):
                         print(f"⚠️ Prose detected in function body:\n{code}")
                         self.retry_count += 1
@@ -166,7 +208,7 @@ class AgentManager:
         
         if any(prose in result.lower() for prose in ["here's", "here is", "corrected", "fixed", "modified", "<think>"]):
             reviewed_fix = self.review_task(result, timeout)
-            print(f"Debug: Reviewer response for task: {reviewed_fix}")  # Added debug
+            print(f"Debug: Reviewer response for task: {reviewed_fix}")
             if reviewed_fix and isinstance(reviewed_fix, str) and reviewed_fix.strip() and reviewed_fix != "ERROR: No valid function found.":
                 final_fix = self.preprocess_ai_response(reviewed_fix)
             else:

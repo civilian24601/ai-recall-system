@@ -27,7 +27,6 @@ from scripts.aggregator_search import aggregator_search
 from scripts.index_codebase import reindex_single_file
 from scripts.blueprint_execution import BlueprintExecution
 
-# Set logging to DEBUG for detailed output
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class BuildAgent:
@@ -102,52 +101,6 @@ class BuildAgent:
         except Exception as e:
             logging.error(f"Error retrieving context for query '{query}': {e}")
             return ""
-
-    def test_fix(self, script_path, original_error):
-        """Test if the fix handles the original error."""
-        try:
-            with open(script_path, "r") as f:
-                script_content = f.read()
-            func_match = re.search(r"def\s+(\w+)\s*\(", script_content)
-            if not func_match:
-                return False, "No function definition found"
-            func_name = func_match.group(1)
-
-            test_code = f"""
-import sys
-from io import StringIO
-def run_test():
-    original_stdout = sys.stdout
-    sys.stdout = StringIO()
-    try:
-        if "{func_name}" == "divide":
-            result = {func_name}(10, 0)
-        elif "{func_name}" == "authenticate_user":
-            result = {func_name}({{'password': 'secure123'}})
-        sys.stdout = original_stdout
-        return result is not None or "Handled" in sys.stdout.getvalue()
-    except Exception as e:
-        sys.stdout = original_stdout
-        return False, str(e)
-result, error = run_test()
-print("Test result:", "Success" if result else f"Failed: {{error}}")
-"""
-            temp_test_path = script_path + ".test"
-            with open(temp_test_path, "w") as f:
-                f.write(script_content + "\n" + test_code)
-            result = subprocess.run(
-                ["python3", temp_test_path],
-                capture_output=True, text=True, timeout=10
-            )
-            os.remove(temp_test_path)
-            output = result.stdout.strip()
-            if "Test result: Success" in output or "Handled" in output:
-                return True, ""
-            return False, result.stderr or "Fix did not handle the original error"
-        except subprocess.TimeoutExpired:
-            return False, "Timeout: Script hung"
-        except Exception as e:
-            return False, str(e)
 
     def reset_state(self):
         test_scripts = {
@@ -232,7 +185,7 @@ def authenticate_user(user_data):
                     f"and NO explanations, inside ```python\n{script_content}\n```."
                 )
                 fix = self.agent_manager.delegate_task("engineer", task_prompt, timeout=300)
-                logging.debug(f"Debug: Engineer's fix for {error_id}: {fix}")  # Confirm engineer output
+                logging.debug(f"Debug: Engineer's fix for {error_id}: {fix}")
 
                 if fix is None or not fix.strip():
                     if attempt_count < self.max_attempts:
@@ -251,7 +204,6 @@ def authenticate_user(user_data):
                     logging.warning(f"Invalid fix format for {error_id}—skipping fix.")
                     fix = None
                 
-                # Force parse fix to ensure it's a valid function
                 if fix and "```python" in fix:
                     try:
                         fix = re.search(r"```python\s*(.*?)\s*```", fix, re.DOTALL).group(1).strip()
@@ -269,12 +221,11 @@ def authenticate_user(user_data):
                     if raw_func:
                         fix = raw_func.group(0).strip()
                     else:
-                        logging.warning(f"Fix for {error_id} not a string or missing valid try/except—skipping fix.")
-                        fix = None
+                        logging.warning(f"Fix for {error_id} not a string or missing valid try/except—using raw response if possible.")
+                        fix = fix if isinstance(fix, str) and fix.strip() else None
 
-                # Force reviewer call even if fix parsing is partial
                 reviewed_fix = None
-                if fix is not None:  # Changed from 'if fix' to handle potential empty strings
+                if fix is not None:
                     review_prompt = (
                         f"Please review this response: {fix if fix.strip() else 'def placeholder(): pass'}. Strip all prose, test cases, <think> blocks, and irrelevant code. "
                         f"Return ONLY the COMPLETE fixed function in Python using a FULL try/except block with the appropriate except clause "
@@ -283,7 +234,7 @@ def authenticate_user(user_data):
                     reviewed_fix = self.agent_manager.delegate_task("reviewer", review_prompt, timeout=300)
                     logging.debug(f"Debug: Reviewed fix for {error_id}: {reviewed_fix}")
 
-                final_fix = fix if fix and fix.strip() else None  # Default to fix if valid, otherwise None
+                final_fix = fix if fix and fix.strip() else None
                 if reviewed_fix and isinstance(reviewed_fix, str) and reviewed_fix.strip():
                     if "```python" in reviewed_fix:
                         try:
@@ -302,10 +253,14 @@ def authenticate_user(user_data):
                         else:
                             logging.warning(f"Reviewed fix for {error_id} missing valid try/except—using original fix.")
 
-                # Debug: Log final fix
                 logging.debug(f"Debug: Final fix for {error_id}: {final_fix}")
 
-                # Stage and validate the fix
+                # Clean up any existing .tmp files before proceeding
+                temp_script_path = script_path + ".tmp"
+                if os.path.exists(temp_script_path):
+                    os.remove(temp_script_path)
+                    logging.debug(f"Cleaned up existing temp file: {temp_script_path}")
+
                 fix_works = False
                 fix_error = "No validation performed"
                 if final_fix:
@@ -314,20 +269,11 @@ def authenticate_user(user_data):
                     with open(temp_script_path, "r") as f:
                         original_content = f.read()
                     with open(temp_script_path, "w") as f:
-                        # Replace only the original function with final_fix
                         func_match = re.search(r"def\s+\w+\s*$$ .*? $$:.*?(?=\n\n|\Z)", original_content, re.DOTALL)
                         if func_match:
                             f.write(original_content.replace(func_match.group(0), final_fix) + "\n")
                         else:
                             f.write(final_fix + "\n" + original_content)
-
-                    fix_works, fix_error = self.test_fix(temp_script_path, error)
-                    if fix_works:
-                        shutil.move(temp_script_path, script_path)
-                        logging.info(f"Applied valid fix to {script_path}")
-                    else:
-                        os.remove(temp_script_path)
-                        logging.warning(f"Fix for {error_id} failed validation: {fix_error}")
 
                 blueprint_id = f"bp_fix_{error_id}"
                 execution_trace_id = self.blueprint_executor.run_blueprint(
