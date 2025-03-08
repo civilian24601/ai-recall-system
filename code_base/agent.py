@@ -31,16 +31,18 @@ from scripts.blueprint_execution import BlueprintExecution
 try:
     log_dir = "/mnt/f/projects/ai-recall-system/logs"
     os.makedirs(log_dir, exist_ok=True)
-    
     logging.basicConfig(
         level=logging.DEBUG,
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
             logging.StreamHandler(sys.stdout),
-            logging.FileHandler(f"{log_dir}/agent_debug.log", mode='w')
+            logging.FileHandler(f"{log_dir}/agent_debug.log", mode='a')  # Changed to 'a' for append
         ]
     )
     logging.debug("Logging initialized successfully for agent.py")
+    # Verify file handler is working
+    with open(f"{log_dir}/agent_debug.log", "a") as f:
+        f.write("Test write to verify file handler\n")
 except Exception as e:
     print(f"⚠️ Failed to initialize logging for agent.py: {e}")
     logging.basicConfig(
@@ -276,7 +278,6 @@ def authenticate_user(user_data):
 
                 logging.debug(f"Debug: Final fix for {error_id}: {final_fix}")
 
-                # Clean up any existing .tmp files before proceeding
                 temp_script_path = script_path + ".tmp"
                 if os.path.exists(temp_script_path):
                     os.remove(temp_script_path)

@@ -26,16 +26,18 @@ from code_base.agent_manager import AgentManager
 try:
     log_dir = "/mnt/f/projects/ai-recall-system/logs"
     os.makedirs(log_dir, exist_ok=True)
-    
     logging.basicConfig(
         level=logging.DEBUG,
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
             logging.StreamHandler(sys.stdout),
-            logging.FileHandler(f"{log_dir}/blueprint_debug.log", mode='w')
+            logging.FileHandler(f"{log_dir}/blueprint_debug.log", mode='a')  # Changed to 'a' for append
         ]
     )
     logging.debug("Logging initialized successfully for blueprint_execution.py")
+    # Verify file handler is working
+    with open(f"{log_dir}/blueprint_debug.log", "a") as f:
+        f.write("Test write to verify file handler\n")
 except Exception as e:
     print(f"⚠️ Failed to initialize logging for blueprint_execution.py: {e}")
     logging.basicConfig(
@@ -87,21 +89,19 @@ class BlueprintExecution:
                     logging.error("final_fix is required for 'Apply fix' task")
                     raise ValueError("final_fix is required for 'Apply fix' task")
                 
-                # Apply the final_fix to the original script
                 logging.debug(f"Copying script {script_path} to temp file {temp_script_path}")
                 shutil.copy(script_path, temp_script_path)
                 with open(temp_script_path, "r") as f:
                     original_content = f.read()
                 logging.debug(f"Original content of {temp_script_path}: {original_content}")
                 with open(temp_script_path, "w") as f:
-                    func_match = re.search(r"def\s+\w+\s*\(.*?\):.*?(?=\n\n|\Z)", original_content, re.DOTALL)
+                    func_match = re.search(r"def\s+\w+\s*$$ .*? $$:.*?(?=\n\n|\Z)", original_content, re.DOTALL)
                     if func_match:
                         f.write(original_content.replace(func_match.group(0), final_fix) + "\n")
                     else:
                         f.write(final_fix + "\n" + original_content)
                 logging.debug(f"Updated content of {temp_script_path} with fix: {final_fix}")
 
-                # Validate the fix using AgentManager's test_fix with debug logging
                 logging.debug(f"Validating fix for {script_path} with original_error: {original_error}")
                 fix_works = False
                 fix_error = "No validation performed"

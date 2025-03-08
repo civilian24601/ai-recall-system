@@ -101,9 +101,11 @@ def aggregator_search(query, top_n=3, mode="embedding"):
                 for doc_text, meta, dist, doc_id in zip(docs, metas, dists, ids):
                     if not isinstance(meta, dict):
                         meta = {}
-                    # Boost guideline chunks more significantly
-                    if meta.get("filename", "").endswith(".md") or meta.get("guideline", False):
-                        dist = max(0, dist - 0.5)  # Stronger boost, cap at 0
+                    # Stronger boost for ai_coding_guidelines.md
+                    if meta.get("filename") == "ai_coding_guidelines.md":
+                        dist = max(0, dist - 1.0)  # Significant boost
+                    elif meta.get("filename", "").endswith(".md") or meta.get("guideline", False):
+                        dist = max(0, dist - 0.7)  # Moderate boost for other markdown
                     # Force naive-only docs to rank via substring
                     if meta.get("naive_only", False) and dist < 9.0:
                         dist = 9.0
@@ -143,12 +145,18 @@ def aggregator_search(query, top_n=3, mode="embedding"):
                          r["metadata"].get("filename", "").endswith(".py"))]
         logger.debug(f"Filtered to {len(combined_list)} guidelines/code docs for mode 'guidelines_code'")
 
-    # Ensure at least one guideline doc if available
-    if mode == "guidelines_code" and combined_list and not any(r["metadata"].get("filename") == "ai_coding_guidelines.md" for r in combined_list):
+    # Ensure ai_coding_guidelines.md is included if available
+    if mode == "guidelines_code" and combined_list:
         for r in combined_list:
-            if r["metadata"].get("filename", "").endswith(".md"):
-                logger.debug(f"Ensuring guideline inclusion, added {r['metadata'].get('filename')}")
+            if r["metadata"].get("filename") == "ai_coding_guidelines.md":
+                logger.debug(f"Ensuring ai_coding_guidelines.md inclusion")
                 break
+        else:
+            # If not found, prioritize any guideline
+            for r in combined_list:
+                if r["metadata"].get("filename", "").endswith(".md"):
+                    logger.debug(f"Ensuring guideline inclusion, added {r['metadata'].get('filename')}")
+                    break
 
     return combined_list[:top_n]
 

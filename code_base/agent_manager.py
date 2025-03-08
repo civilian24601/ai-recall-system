@@ -19,10 +19,13 @@ try:
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
             logging.StreamHandler(sys.stdout),
-            logging.FileHandler(f"{log_dir}/agent_manager_debug.log", mode='w')
+            logging.FileHandler(f"{log_dir}/agent_manager_debug.log", mode='a')  # Changed to 'a' for append
         ]
     )
     logging.debug("Logging initialized successfully for agent_manager.py")
+    # Verify file handler is working
+    with open(f"{log_dir}/agent_manager_debug.log", "a") as f:
+        f.write("Test write to verify file handler\n")
 except Exception as e:
     print(f"⚠️ Failed to initialize logging for agent_manager.py: {e}")
     logging.basicConfig(
@@ -143,8 +146,7 @@ print("Test result:", "Success" if result else f"Failed: {{error}}")
                 f"{task_prompt}\n\n"
                 "Output MUST be a complete Python function inside ```python ... ``` ONLY. "
                 "NO prose (e.g., 'Here's', 'This is'), NO <think> blocks, NO test cases, NO comments (#), NO standalone raise statements outside try. "
-                "Use try/except for ZeroDivisionError or KeyError ONLY (use 'except (ZeroDivisionError, KeyError)' syntax), "
-                "return None in except, NO returns outside except. STRICT ADHERENCE REQUIRED."
+                "Use try/except for ZeroDivisionError or KeyError ONLY, returning None in except, NO returns outside except. STRICT ADHERENCE REQUIRED."
             )
             response = requests.post(
                 self.api_url,
@@ -178,8 +180,8 @@ print("Test result:", "Success" if result else f"Failed: {{error}}")
         logging.debug(f"Reviewing codestral output: {codestral_output}")
         review_prompt = (
             f"Review this: {codestral_output}. Return ONLY the COMPLETE fixed function in Python "
-            "using a FULL try/except block for ZeroDivisionError or KeyError ONLY (use 'except (ZeroDivisionError, KeyError)' syntax), "
-            "returning None in except, inside ```python ... ```. NO prose, NO <think> blocks, NO extra logic, NO comments (#), "
+            "using a FULL try/except block for ZeroDivisionError or KeyError ONLY, returning None in except, "
+            "inside ```python ... ```. NO prose, NO <think> blocks, NO extra logic, NO comments (#), "
             "NO standalone raise statements outside try, NO returns outside except. STRICT ADHERENCE REQUIRED."
         )
         return self.send_task("reviewer", review_prompt, timeout)
