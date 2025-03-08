@@ -89,8 +89,10 @@ def run_test():
     except Exception as e:
         sys.stdout = original_stdout
         return False, str(e)
-result, error = run_test()
-print("Test result:", "Success" if result else f"Failed: {error}")
+
+if __name__ == "__main__":
+    result, error = run_test()
+    print("Test result:", "Success" if result else "Failed: " + error)
 """
             logging.debug(f"Generated test code: {test_code}")
 
