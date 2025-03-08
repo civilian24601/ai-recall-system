@@ -60,18 +60,21 @@ class AgentManager:
         try:
             with open(script_path, "r") as f:
                 script_content = f.read()
-            logging.debug(f"Script content: {script_content}")
+            logging.debug(f"Original script content: {script_content}")
 
-            func_match = re.search(r"def\s+(\w+)\s*\(", script_content)
+            # Extract the fixed function (last definition in the file)
+            func_match = re.search(r"def\s+(\w+)\s*\(.*?\):.*?(?=\n\n|\Z)", script_content, re.DOTALL)
             if not func_match:
                 logging.error("No function definition found in script")
                 return False, "No function definition found"
             func_name = func_match.group(1)
             logging.debug(f"Extracted function name: {func_name}")
 
+            # Create a test script with only the fixed function
             test_code = f"""
 import sys
 from io import StringIO
+{func_match.group(0).strip()}  # Use only the fixed function
 def run_test():
     original_stdout = sys.stdout
     sys.stdout = StringIO()
@@ -93,7 +96,7 @@ print("Test result:", "Success" if result else f"Failed: {{error}}")
 
             temp_test_path = script_path + ".test"
             with open(temp_test_path, "w") as f:
-                f.write(script_content + "\n" + test_code)
+                f.write(test_code)
             logging.debug(f"Wrote test script to: {temp_test_path}")
 
             try:
