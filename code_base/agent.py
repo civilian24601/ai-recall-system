@@ -19,6 +19,7 @@ import subprocess
 import re
 import shutil
 from langchain_huggingface.embeddings import HuggingFaceEmbeddings
+from datetime import datetime  # Added for consistency with previous logs
 
 sys.path.append("/mnt/f/projects/ai-recall-system")
 
@@ -52,49 +53,53 @@ except Exception as e:
     logging.warning("Falling back to console-only logging due to file handler error")
 
 class BuildAgent:
-    def __init__(self, project_dir="/mnt/f/projects/ai-recall-system", test_mode=False):
-        self.project_dir = project_dir
-        self.test_mode = test_mode
+    def __init__(self, test_mode=False):
+        """Initialize the BuildAgent with test_mode support."""
         self.agent_manager = AgentManager()
+        self.test_mode = test_mode
+        self.max_attempts = 6
+        self.project_dir = "/mnt/f/projects/ai-recall-system"
+        self.backup_dir = f"{self.project_dir}/backups"
+        self.debug_log_file = f"{self.project_dir}/logs/DEBUG_LOGS_TEST.JSON"
         self.embed_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-        self.chroma_client = chromadb.PersistentClient(path=f"{project_dir}/chroma_db")
-        self.logs_dir = f"{project_dir}/logs"
-        os.makedirs(self.logs_dir, exist_ok=True)
-        self.debug_log_file = f"{self.logs_dir}/debug_logs{'_test' if test_mode else ''}.json"
-        self.max_attempts = 5
-        self.backup_dir = f"{project_dir}/code_base/test_scripts/backup/"
+        self.collections = {
+            "execution_logs": chromadb.PersistentClient(path=f"{self.project_dir}/chroma_db").get_or_create_collection("execution_logs"),
+            "blueprint_versions": chromadb.PersistentClient(path=f"{self.project_dir}/chroma_db").get_or_create_collection("blueprint_versions"),
+            "blueprint_revisions": chromadb.PersistentClient(path=f"{self.project_dir}/chroma_db").get_or_create_collection("blueprint_revisions"),
+            "knowledge_base": chromadb.PersistentClient(path=f"{self.project_dir}/chroma_db").get_or_create_collection("knowledge_base"),
+            "work_sessions": chromadb.PersistentClient(path=f"{self.project_dir}/chroma_db").get_or_create_collection("work_sessions"),
+            "blueprints": chromadb.PersistentClient(path=f"{self.project_dir}/chroma_db").get_or_create_collection("blueprints"),
+            "debugging_logs": chromadb.PersistentClient(path=f"{self.project_dir}/chroma_db").get_or_create_collection("debugging_logs"),
+            "project_codebase": chromadb.PersistentClient(path=f"{self.project_dir}/chroma_db").get_or_create_collection("project_codebase")
+        }
+        self.blueprint_executor = BlueprintExecution(agent_manager=self.agent_manager, test_mode=self.test_mode, collections=self.collections)
+        self.debug_logs = []
+        self.load_debug_logs()
+
         os.makedirs(self.backup_dir, exist_ok=True)
 
-        self.collections = {
-            "knowledge_base": self.chroma_client.get_or_create_collection(
-                name="knowledge_base" if not self.test_mode else "knowledge_base_test"
-            ),
-            "execution_logs": self.chroma_client.get_or_create_collection(
-                name="execution_logs" if not self.test_mode else "execution_logs_test"
-            ),
-            "debugging_logs": self.chroma_client.get_or_create_collection(
-                name="debugging_logs" if not self.test_mode else "debugging_logs_test"
-            ),
-            "project_codebase": self.chroma_client.get_or_create_collection(
-                name="projectcodebase" if not self.test_mode else "projectcodebase_test"
-            ),
-            "blueprint_versions": self.chroma_client.get_or_create_collection(
-                name="blueprint_versions" if not self.test_mode else "blueprint_versions_test"
-            ),
-            "blueprint_revisions": self.chroma_client.get_or_create_collection(
-                name="blueprint_revisions" if not self.test_mode else "blueprint_revisions_test"
-            ),
-            "markdown_logs": self.chroma_client.get_or_create_collection(
-                name="markdown_logs" if not self.test_mode else "markdown_logs_test"
-            )
-        }
-        self.blueprint_executor = BlueprintExecution(
-            agent_manager=self.agent_manager,
-            test_mode=self.test_mode,
-            collections=self.collections
+        print(
+            f"🔧 [BuildAgent __init__] Initialized with test_mode={self.test_mode}\n"
+            f"Project dir: {self.project_dir}\n"
+            f"Collections initialized: {list(self.collections.keys())}\n"
+            "AI-driven repair and blueprint execution ready."
         )
 
+    def load_debug_logs(self):
+        """Load debug logs from the JSON file."""
+        try:
+            if os.path.exists(self.debug_log_file):
+                with open(self.debug_log_file, "r") as f:
+                    self.debug_logs = json.load(f)
+            else:
+                self.debug_logs = []
+            logging.debug(f"Loaded debug logs: {self.debug_logs}")
+        except Exception as e:
+            logging.error(f"Failed to load debug logs: {e}")
+            self.debug_logs = []
+
     def log_entry(self, collection_name, entry_id, data):
+        """Log an entry to the specified collection."""
         collection = self.collections[collection_name]
         meta = {"timestamp": time.strftime("%Y-%m-%d %H:%M:%S"), "id": entry_id}
         collection.upsert(
@@ -105,6 +110,7 @@ class BuildAgent:
         logging.info(f"Logged entry '{entry_id}' to {collection_name}")
 
     def retrieve_context(self, query):
+        """Retrieve context for the query using aggregator_search."""
         try:
             results = aggregator_search(query, top_n=3, mode="guidelines_code")
             guidelines_context = [r["document"] for r in results if r.get("metadata", {}).get("filename") == "ai_coding_guidelines.md"]
@@ -125,6 +131,7 @@ class BuildAgent:
             return ""
 
     def reset_state(self):
+        """Reset test scripts and debug logs to their initial states."""
         test_scripts = {
             "test_script.py": """
 def divide(a, b):
@@ -157,6 +164,7 @@ def authenticate_user(user_data):
         logging.info("Reset test scripts and debug logs to initial states.")
 
     def run(self):
+        """Run the agent to process unresolved issues with retry logic."""
         logging.info("Starting Build Agent with blueprint-driven execution and RAG for ai_coding_guidelines.md...")
         
         self.reset_state()
@@ -286,7 +294,8 @@ def authenticate_user(user_data):
                     script_path=script_path,
                     execution_context=context,
                     final_fix=final_fix,
-                    original_error=error if error else "Unknown error"
+                    original_error=error if error else "Unknown error",
+                    stack_trace=stack_trace
                 )
                 
                 if execution_trace_id:
@@ -330,4 +339,12 @@ def authenticate_user(user_data):
 
 if __name__ == "__main__":
     agent = BuildAgent(test_mode=True)
-    agent.run()
+    try:
+        agent.run()
+    except KeyboardInterrupt:
+        print("\n⏹️ Execution interrupted by user.")
+        agent.reset_state()
+    except Exception as e:
+        print(f"⚠️ Unexpected error: {e}")
+        logging.error(f"Unexpected error: {e}, traceback: {traceback.format_exc()}")
+        agent.reset_state()
