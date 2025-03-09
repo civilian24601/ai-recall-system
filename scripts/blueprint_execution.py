@@ -5,6 +5,9 @@ Blueprint Execution Script with LLM-Generated Improvement Notes
 File path: /mnt/f/projects/ai-recall-system/scripts/blueprint_execution.py
 """
 
+# Blueprint Version
+BLUEPRINT_VERSION = "v2.1"
+
 import sys
 import os
 import datetime
@@ -72,12 +75,12 @@ class BlueprintExecution:
             "LLM-based improvement notes enabled with agent_manager."
         )
 
-    def run_blueprint(self, blueprint_id, task_name, script_path, execution_context, final_fix=None, original_error=None):
+    def run_blueprint(self, blueprint_id, task_name, script_path, execution_context, final_fix=None, original_error=None, stack_trace=None):
         """Executes a blueprint task, logs BELog, evolves if improved."""
         print(f"⚙️ Running blueprint {blueprint_id}: {task_name}")
         
         logging.debug(f"Entering run_blueprint with blueprint_id: {blueprint_id}, task_name: {task_name}, script_path: {script_path}, "
-                     f"final_fix: {final_fix}, original_error: {original_error}")
+                     f"final_fix: {final_fix}, original_error: {original_error}, stack_trace: {stack_trace}")
 
         start_time = time.time()
         temp_script_path = script_path + ".tmp"
@@ -95,18 +98,14 @@ class BlueprintExecution:
                     original_content = f.read()
                 logging.debug(f"Original content of {temp_script_path}: {original_content}")
                 with open(temp_script_path, "w") as f:
-                    func_match = re.search(r"def\s+\w+\s*$$ .*? $$:.*?(?=\n\n|\Z)", original_content, re.DOTALL)
-                    if func_match:
-                        f.write(original_content.replace(func_match.group(0), final_fix) + "\n")
-                    else:
-                        f.write(final_fix + "\n" + original_content)
+                    f.write(final_fix + "\n")
                 logging.debug(f"Updated content of {temp_script_path} with fix: {final_fix}")
 
                 logging.debug(f"Validating fix for {script_path} with original_error: {original_error}")
                 fix_works = False
                 fix_error = "No validation performed"
                 try:
-                    fix_works, fix_error = self.agent_manager.test_fix(temp_script_path, original_error)
+                    fix_works, fix_error = self.agent_manager.test_fix(temp_script_path, original_error, stack_trace, final_fix)
                     logging.debug(f"Validation result for {script_path}: fix_works={fix_works}, fix_error={fix_error}")
                 except Exception as e:
                     logging.error(f"Validation failed for {script_path}: {e}, traceback: {traceback.format_exc()}")
