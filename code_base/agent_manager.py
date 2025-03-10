@@ -53,57 +53,88 @@ class AgentManager:
         self.retry_count = 0
         self.max_retries = 3
 
-    def test_fix(self, script_path, original_error):
-        """Test if the fix handles the original error."""
-        logging.debug(f"Starting test_fix for script_path: {script_path}, original_error: {original_error}")
+    def test_fix(self, script_path, original_error, stack_trace, fix):
+        """Test if the fix handles the original error using AST for parsing and modification."""
+        logging.debug(f"Starting test_fix for script_path: {script_path}, original_error: {original_error}, stack_trace: {stack_trace}")
         try:
             with open(script_path, "r") as f:
                 script_content = f.read()
             logging.debug(f"Original script content: {script_content}")
 
-            # Extract only the first function definition as the fixed function
-            func_match = re.search(r"def\s+(\w+)\s*\((.*?)\):\n((\s+.*\n)+)(?=(?:def\s+\w+\s*\(|$))", script_content, re.MULTILINE)
-            if not func_match:
-                logging.error("No function definition found in script")
-                return False, "No function definition found"
-            func_name = func_match.group(1)
-            func_args = func_match.group(2)
-            func_body = func_match.group(3).strip()
-            # Ensure the function body is properly indented
-            if not func_body:
-                logging.error("Function body is empty")
-                return False, "Function body is empty"
-            # Reconstruct the fixed function with proper indentation
-            # Indent the body by 4 spaces to align with Python convention
-            indented_body = "\n".join("    " + line for line in func_body.splitlines())
-            fixed_function = f"def {func_name}({func_args}):\n{indented_body}"
-            logging.debug(f"Extracted function name: {func_name}, fixed function: {fixed_function}")
+            # Parse the script into an AST
+            tree = ast.parse(script_content)
+            logging.debug("Parsed script into AST")
 
-            # Create a test script with the properly formatted fixed function
-            test_code = f"""
-import sys
-from io import StringIO
-{fixed_function}
+            # Extract the line number from the stack_trace
+            line_match = re.search(r"line (\d+)", stack_trace)
+            if not line_match:
+                logging.error("Could not extract line number from stack_trace")
+                return False, "Invalid stack_trace format"
+            error_line = int(line_match.group(1))
+            logging.debug(f"Error line from stack_trace: {error_line}")
 
+            # Find the function containing the error line
+            target_func = None
+            for node in ast.walk(tree):
+                if isinstance(node, ast.FunctionDef):
+                    if node.lineno <= error_line <= node.end_lineno:
+                        target_func = node
+                        break
+            if not target_func:
+                logging.error("No function found containing the error line")
+                return False, "No function found at error line"
+
+            func_name = target_func.name
+            logging.debug(f"Found target function: {func_name} at lines {target_func.lineno}-{target_func.end_lineno}")
+
+            # Parse the AI-generated fix and apply it to the target function
+            fix_tree = ast.parse(fix)
+            if not fix_tree.body or not isinstance(fix_tree.body[0], ast.FunctionDef):
+                logging.error("Fix does not contain a valid function definition")
+                return False, "Invalid fix format"
+            fix_func = fix_tree.body[0]
+            if fix_func.name != func_name:
+                logging.error(f"Fix function name {fix_func.name} does not match target function {func_name}")
+                return False, "Fix function name mismatch"
+            target_func.body = fix_func.body  # Replace the body of the target function with the fixed body
+            logging.debug(f"Applied fix to function {func_name}")
+
+            # Create a new module AST for the test script
+            test_module = ast.Module(body=[
+                # Import statements
+                ast.Import(names=[ast.alias(name='sys', asname=None)]),
+                ast.ImportFrom(module='io', names=[ast.alias(name='StringIO', asname=None)], level=0),
+                # The fixed function
+                target_func,
+                # run_test function with corrected logic
+                ast.parse(f"""
 def run_test():
     original_stdout = sys.stdout
     sys.stdout = StringIO()
     try:
         if "{func_name}" == "divide":
-            result = {func_name}(10, 0)
+            result = {func_name}(10, 0)  # Test division by zero
         elif "{func_name}" == "authenticate_user":
-            result = {func_name}({{'password': 'secure123'}})
+            result = {func_name}({{'username': 'test', 'password': 'secure123'}})  # Test with valid username
+            if result is None:
+                raise ValueError("Unexpected None return")
         sys.stdout = original_stdout
-        error_msg = "" if result is None else "Expected None but got a value"
+        error_msg = "" if result is not None or "{func_name}" == "divide" and result is None else "Expected non-None result"
         return True, error_msg
-    except Exception as e:
+    except (ZeroDivisionError, KeyError, ValueError) as e:
         sys.stdout = original_stdout
         return False, str(e)
-
+                """).body[0],
+                # Main block
+                ast.parse("""
 if __name__ == "__main__":
     result, error = run_test()
     print("Test result:", "Success" if result else "Failed: " + error)
-"""
+                """).body[0]
+            ], type_ignores=[])
+
+            # Unparse the test script with correct formatting
+            test_code = ast.unparse(test_module)
             logging.debug(f"Generated test code: {test_code}")
 
             temp_test_path = script_path + ".test"
