@@ -53,136 +53,143 @@ class AgentManager:
         self.retry_count = 0
         self.max_retries = 3
 
-    def test_fix(self, script_path, original_error, stack_trace, fix):
-        """Test if the fix handles the original error using AST for parsing and modification."""
-        logging.debug(f"Starting test_fix for script_path: {script_path}, original_error: {original_error}, stack_trace: {stack_trace}")
-        try:
-            with open(script_path, "r") as f:
-                script_content = f.read()
-            logging.debug(f"Original script content: {script_content}")
+def test_fix(self, script_path, original_error, stack_trace, fix):
+    """Test if the fix handles the original error using AST for parsing and modification."""
+    logging.debug(f"Starting test_fix for script_path: {script_path}, original_error: {original_error}, stack_trace: {stack_trace}")
+    try:
+        with open(script_path, "r") as f:
+            script_content = f.read()
+        logging.debug(f"Original script content: {script_content}")
 
-            # Parse the script into an AST
-            tree = ast.parse(script_content)
-            logging.debug("Parsed script into AST")
+        # Parse the script into an AST
+        tree = ast.parse(script_content)
+        logging.debug("Parsed script into AST")
 
-            # Extract the line number from the stack_trace
-            line_match = re.search(r"line (\d+)", stack_trace)
-            if not line_match:
-                logging.error("Could not extract line number from stack_trace")
-                return False, "Invalid stack_trace format"
-            error_line = int(line_match.group(1))
-            logging.debug(f"Error line from stack_trace: {error_line}")
+        # Extract the line number from the stack_trace
+        line_match = re.search(r"line (\d+)", stack_trace)
+        if not line_match:
+            logging.error("Could not extract line number from stack_trace")
+            return False, "Invalid stack_trace format"
+        error_line = int(line_match.group(1))
+        logging.debug(f"Error line from stack_trace: {error_line}")
 
-            # Find the function containing the error line
-            target_func = None
-            for node in ast.walk(tree):
-                if isinstance(node, ast.FunctionDef):
-                    if node.lineno <= error_line <= node.end_lineno:
-                        target_func = node
-                        break
-            if not target_func:
-                logging.error("No function found containing the error line")
-                return False, "No function found at error line"
+        # Find the function containing the error line
+        target_func = None
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef):
+                if node.lineno <= error_line <= node.end_lineno:
+                    target_func = node
+                    break
+        if not target_func:
+            logging.error("No function found containing the error line")
+            return False, "No function found at error line"
 
-            func_name = target_func.name
-            logging.debug(f"Found target function: {func_name} at lines {target_func.lineno}-{target_func.end_lineno}")
+        func_name = target_func.name
+        logging.debug(f"Found target function: {func_name} at lines {target_func.lineno}-{target_func.end_lineno}")
 
-            # Parse the AI-generated fix and apply it to the target function
-            fix_tree = ast.parse(fix)
-            if not fix_tree.body or not isinstance(fix_tree.body[0], ast.FunctionDef):
-                logging.error("Fix does not contain a valid function definition")
-                return False, "Invalid fix format"
-            fix_func = fix_tree.body[0]
-            if fix_func.name != func_name:
-                logging.error(f"Fix function name {fix_func.name} does not match target function {func_name}")
-                return False, "Fix function name mismatch"
-            target_func.body = fix_func.body  # Replace the body of the target function with the fixed body
-            logging.debug(f"Applied fix to function {func_name}")
+        # Parse the AI-generated fix and apply it to the target function
+        fix_tree = ast.parse(fix)
+        if not fix_tree.body or not isinstance(fix_tree.body[0], ast.FunctionDef):
+            logging.error("Fix does not contain a valid function definition")
+            return False, "Invalid fix format"
+        fix_func = fix_tree.body[0]
+        if fix_func.name != func_name:
+            logging.error(f"Fix function name {fix_func.name} does not match target function {func_name}")
+            return False, "Fix function name mismatch"
+        target_func.body = fix_func.body  # Replace the body of the target function with the fixed body
+        logging.debug(f"Applied fix to function {func_name}")
 
-            # Create a new module AST for the test script
-            test_module = ast.Module(body=[
-                # Import statements
-                ast.Import(names=[ast.alias(name='sys', asname=None)]),
-                ast.ImportFrom(module='io', names=[ast.alias(name='StringIO', asname=None)], level=0),
-                # The fixed function
-                target_func,
-                # run_test function with corrected logic
-                ast.parse(f"""
+        # Create a new module AST for the test script
+        test_module = ast.Module(body=[
+            # Import statements
+            ast.Import(names=[ast.alias(name='sys', asname=None)]),
+            ast.ImportFrom(module='io', names=[ast.alias(name='StringIO', asname=None)], level=0),
+            # The fixed function
+            target_func,
+            # run_test function with dynamic error simulation
+            ast.parse(f"""
 def run_test():
     original_stdout = sys.stdout
     sys.stdout = StringIO()
     try:
         if "{func_name}" == "divide":
             result = {func_name}(10, 0)  # Test division by zero
+            expected = None
         elif "{func_name}" == "authenticate_user":
-            result = {func_name}({{'username': 'test', 'password': 'secure123'}})  # Test with valid username
+            result = {func_name}({{'username': 'test', 'password': 'secure123'}})  # Valid input
+            expected = 'test'
             if result is None:
-                raise ValueError("Unexpected None return")
+                raise ValueError("Unexpected None return with valid input")
+            # Additional test for KeyError handling
+            result_invalid = {func_name}({{'password': 'secure123'}})  # Invalid input
+            if result_invalid is not None:
+                raise ValueError("Expected None return with invalid input")
+        else:
+            raise ValueError("Unknown function for testing")
         sys.stdout = original_stdout
-        error_msg = "" if result is not None or "{func_name}" == "divide" and result is None else "Expected non-None result"
-        return True, error_msg
-    except (ZeroDivisionError, KeyError, ValueError) as e:
+        return True, ""
+    except Exception as e:
         sys.stdout = original_stdout
         return False, str(e)
-                """).body[0],
-                # Main block
-                ast.parse("""
+            """).body[0],
+            # Main block
+            ast.parse("""
 if __name__ == "__main__":
     result, error = run_test()
     print("Test result:", "Success" if result else "Failed: " + error)
-                """).body[0]
-            ], type_ignores=[])
+            """).body[0]
+        ], type_ignores=[])
 
-            # Unparse the test script with correct formatting
-            test_code = ast.unparse(test_module)
-            logging.debug(f"Generated test code: {test_code}")
+        # Unparse the test script with correct formatting
+        test_code = ast.unparse(test_module)
+        logging.debug(f"Generated test code: {test_code}")
 
-            temp_test_path = script_path + ".test"
-            with open(temp_test_path, "w") as f:
-                f.write(test_code)
-            logging.debug(f"Wrote test script to: {temp_test_path}")
+        temp_test_path = script_path + ".test"
+        with open(temp_test_path, "w") as f:
+            f.write(test_code)
+        logging.debug(f"Wrote test script to: {temp_test_path}")
 
-            try:
-                process = subprocess.run(
-                    ["python", temp_test_path],
-                    capture_output=True,
-                    text=True,
-                    timeout=30
-                )
-                logging.debug(f"Subprocess completed: returncode={process.returncode}, stdout={process.stdout}, stderr={process.stderr}")
-            except subprocess.TimeoutExpired as e:
-                logging.error(f"Subprocess timeout: {e}")
-                if os.path.exists(temp_test_path):
-                    os.remove(temp_test_path)
-                    logging.debug(f"Cleaned up test script after timeout: {temp_test_path}")
-                return False, "Timeout: Script hung"
-            except subprocess.SubprocessError as e:
-                logging.error(f"Subprocess error: {e}, traceback: {traceback.format_exc()}")
-                if os.path.exists(temp_test_path):
-                    os.remove(temp_test_path)
-                    logging.debug(f"Cleaned up test script after subprocess error: {temp_test_path}")
-                return False, f"Subprocess error: {str(e)}"
-
+        try:
+            process = subprocess.run(
+                ["python", temp_test_path],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            logging.debug(f"Subprocess completed: returncode={process.returncode}, stdout={process.stdout}, stderr={process.stderr}")
+        except subprocess.TimeoutExpired as e:
+            logging.error(f"Subprocess timeout: {e}")
             if os.path.exists(temp_test_path):
                 os.remove(temp_test_path)
-                logging.debug(f"Cleaned up test script: {temp_test_path}")
-
-            output = process.stdout.strip()
-            logging.debug(f"Subprocess output: {output}")
-            if "Test result: Success" in output:
-                logging.debug("Fix validated successfully")
-                return True, ""
-            else:
-                error_msg = process.stderr or "Fix did not handle the original error"
-                logging.debug(f"Fix validation failed: {error_msg}")
-                return False, error_msg
-
-        except Exception as e:
-            logging.error(f"Error in test_fix: {e}, traceback: {traceback.format_exc()}")
-            if 'temp_test_path' in locals() and os.path.exists(temp_test_path):
+                logging.debug(f"Cleaned up test script after timeout: {temp_test_path}")
+            return False, "Timeout: Script hung"
+        except subprocess.SubprocessError as e:
+            logging.error(f"Subprocess error: {e}, traceback: {traceback.format_exc()}")
+            if os.path.exists(temp_test_path):
                 os.remove(temp_test_path)
-                logging.debug(f"Cleaned up test script after error: {temp_test_path}")
-            return False, f"Test execution failed: {str(e)}"
+                logging.debug(f"Cleaned up test script after subprocess error: {temp_test_path}")
+            return False, f"Subprocess error: {str(e)}"
+
+        if os.path.exists(temp_test_path):
+            os.remove(temp_test_path)
+            logging.debug(f"Cleaned up test script: {temp_test_path}")
+
+        output = process.stdout.strip()
+        logging.debug(f"Subprocess output: {output}")
+        if "Test result: Success" in output:
+            logging.debug("Fix validated successfully")
+            return True, ""
+        else:
+            error_msg = process.stderr or output or "Fix did not handle the original error"
+            logging.debug(f"Fix validation failed: {error_msg}")
+            return False, error_msg
+
+    except Exception as e:
+        logging.error(f"Error in test_fix: {e}, traceback: {traceback.format_exc()}")
+        if 'temp_test_path' in locals() and os.path.exists(temp_test_path):
+            os.remove(temp_test_path)
+            logging.debug(f"Cleaned up test script after error: {temp_test_path}")
+        return False, f"Test execution failed: {str(e)}"
 
     def send_task(self, agent, task_prompt, timeout=300):
         model = self.agents.get(agent, "codestral-22b-v0.1")
