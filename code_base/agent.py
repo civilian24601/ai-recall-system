@@ -18,8 +18,9 @@ import chromadb
 import subprocess
 import re
 import shutil
+import traceback  # Added for exception handling
 from langchain_huggingface.embeddings import HuggingFaceEmbeddings
-from datetime import datetime  # Added for consistency with previous logs
+from datetime import datetime
 
 sys.path.append("/mnt/f/projects/ai-recall-system")
 
@@ -77,6 +78,12 @@ class BuildAgent:
         self.load_debug_logs()
 
         os.makedirs(self.backup_dir, exist_ok=True)
+
+        # Debug: Verify agent_manager has delegate_task
+        if not hasattr(self.agent_manager, 'delegate_task'):
+            logging.error("AgentManager instance missing delegate_task method")
+        else:
+            logging.debug("AgentManager instance has delegate_task method")
 
         print(
             f"🔧 [BuildAgent __init__] Initialized with test_mode={self.test_mode}\n"
