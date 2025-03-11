@@ -73,7 +73,7 @@ ERROR_HANDLERS = {
     "KeyError": ErrorHandler(
         error_type="KeyError",
         fix_strategy=lambda node: "try/except KeyError",
-        test_case_generator=lambda args: [{"password": "secure123"}] if len(args) == 1 else [None],  # Missing "username"
+        test_case_generator=lambda args: [{"password": "secure123"}] if len(args) == 1 else None,  # Missing "username"
         validator=lambda result: result is None  # Expect None when "username" is missing
     ),
     "TypeError": ErrorHandler(
