@@ -2,7 +2,7 @@
 
 ## 📌 Introduction
 This merges two key topics:  
-- **Future Proofing**: Strategies to keep the AI Recall System flexible as AI tech races ahead—376 chunks (110 code, 266 docs) as of 03/04/2025.  
+- **Future Proofing**: Strategies to keep the AI Recall System flexible as AI tech races ahead.  
 - **Anticipated Complexities**: Risks and mitigations as we scale to self-improving, multi-agent dev.  
 
 ✅ **Goal**: A layered, modular system—scalable, robust, no rewrites—handling memory bloat, agent conflicts, and tech shifts.
@@ -16,15 +16,15 @@ Eight principles to keep the system adaptable:
 - **Data Layer**: Logs, code, docs in JSON/Markdown—e.g., `/logs/script_logs/index_codebase.log`, `knowledge_base/*.md`. Consistent schema for Chroma swaps.  
 - **Core Logic**: `index_codebase.py`, `index_knowledgebase.py`—stable methods like `chunk_file()`, `get_file_hash()`. Swap DBs/LLMs without pain.  
 - **Model Layer**: Abstract LLM calls—e.g., `run_llm(prompt)` (TBD)—pivot from local to remote models seamlessly.  
-- **Presentation**: CLI (`retrieve_codebase.py`) now, UI (`/frontend/`) later—decoupled, swappable.  
+- **Presentation**: CLI (`retrieve_codebase.py`,`aggregator_search.py`) now, UI (`/frontend/`) later—decoupled, swappable.  
 
 ### 🔹 2.2 Abstract Dependencies & Use Open Formats
 - **Tools**: Wrap Chroma in `VectorStore`—e.g., 376 chunks indexed, ready for Weaviate if needed.  
 - **Standards**: JSON logs, Markdown docs—e.g., 266 chunks in `knowledge_base`, exportable anytime.  
-- **Libs**: Python (`watchdog`, `chromadb`)—big community, no lock-in.
+- **Libs**: Python (`watchdog`, `chromadb`)—big community, no vendor lock-in.
 
 ### 🔹 2.3 Summarization & Tiered Memory
-- **Short-Term**: Last 110 code chunks, 266 doc chunks—high-perf index in `chroma_db/`.  
+- **Short-Term**: Last 110 code chunks, 266 doc chunks—high-perf index in `chroma_db/`.  (needs updating)
 - **Medium-Term**: Summarize old runs—e.g., “105 files, 110 chunks” → single entry.  
 - **Long-Term**: Archive raw logs—e.g., `/logs/script_logs/` zipped for rare pulls.  
 ✅ **Why**: 376 chunks now—millions by 2026 without bloat.
@@ -35,12 +35,12 @@ Eight principles to keep the system adaptable:
 - **Health**: TBD—Chroma ping, agent uptime checks.
 
 ### 🔹 2.5 Stay Flexible with Model Choices
-- **Local/Remote**: `all-MiniLM-L6-v2` now—room for Llama or Mistral later.  
+- **Local/Remote**: `all-MiniLM-L6-v2` now—room for Llama, Claude distill or Mistral later.  
 - **Tuning**: Logs (`/logs/script_logs/`) and docs (`knowledge_base/`) ready for fine-tuning.
 
 ### 🔹 2.6 Composable Building Blocks
 - **Ingestion**: `index_*.py`—reads, chunks, indexes (376 total).  
-- **Retrieval**: `retrieve_codebase.py`—finds fixes fast.  
+- **Retrieval**: `retrieve_codebase.py`, `aggregator_search.py`—finds fixes fast.  
 - **Processing**: TBD—summarizes, generates code.  
 - **Orchestration**: Agent-driven—ties it all (Phase 2).
 
@@ -60,7 +60,7 @@ Eight principles to keep the system adaptable:
 Risks as we scale to 376+ chunks and multi-agent autonomy:
 
 ### 🔹 3.1 AI Retrieval Challenges
-- **Risk**: Irrelevant pulls—e.g., `README.md` dupes (Issue #4).  
+- **Risk**: Irrelevant pulls—e.g., `README.md` dupes (Issue #6).  
 - **Issues**: Wrong context, outdated fixes—e.g., mid-chunk cuts in `agent.py`.  
 - **Mitigation**: Filters by project, recency—e.g., prioritize 2025-03-04 logs.
 
@@ -82,12 +82,12 @@ Risks as we scale to 376+ chunks and multi-agent autonomy:
 ### 🔹 3.5 AI Hallucination Risks
 - **Risk**: Fake fixes—e.g., non-existent `try_foo()`.  
 - **Issues**: Bad code, logic errors—e.g., untested refactors.  
-- **Mitigation**: Validate vs. `knowledge_base`, confidence thresholds.
+- **Mitigation**: Validate vs. `knowledge_base`, test suites, multiple LLM validators, confidence thresholds.
 
 ### 🔹 3.6 AI Self-Refactoring Complexity
 - **Risk**: Breaks logic—e.g., cuts mid-function in `agent.py`.  
 - **Issues**: Performance drops, abstractions—e.g., 300-line chunks.  
-- **Mitigation**: Pre/post metrics, tests—e.g., `test_index_codebase.py`.
+- **Mitigation**: Pre/post metrics, tests—e.g., `test_index_codebase.py`, multiple LLM validators.
 
 ### 🔹 3.7 AI Execution Oversight & Safety
 - **Risk**: Rogue changes—e.g., wipes `chroma_db/`.  

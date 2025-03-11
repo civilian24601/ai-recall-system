@@ -1,0 +1,34 @@
+{
+    "test1": {
+      "script": "test_cases/test_script.py",
+      "error": "ZeroDivisionError",
+      "stack_trace": "File 'test_script.py', line 3",
+      "expected_fix": "def divide(a, b):\n    try:\n        return a / b\n    except ZeroDivisionError:\n        return None",
+      "test_input": "(10, 0)",
+      "expected_result": "None"
+    },
+    "test2": {
+      "script": "test_cases/user_auth.py",
+      "error": "KeyError",
+      "stack_trace": "File 'user_auth.py', line 5",
+      "expected_fix": "def authenticate_user(user_data):\n    try:\n        return user_data[\"username\"]\n    except KeyError:\n        return None",
+      "test_input": "[{'password': 'secure123'}]",
+      "expected_result": "None"
+    },
+    "test3": {
+      "script": "test_cases/complex_script.py",
+      "error": "TypeError",
+      "stack_trace": "File 'complex_script.py', line 4",
+      "expected_fix": "def nested_function(x, y):\n    def inner(z):\n        try:\n            return x / z if z else None\n        except TypeError:\n            return None\n    try:\n        return inner(y) + str(y)\n    except TypeError:\n        return None",
+      "test_input": "(10, 'invalid')",
+      "expected_result": "None"
+    },
+    "test4": {
+      "script": "test_cases/complex_script.py",
+      "error": "KeyError",
+      "stack_trace": "File 'complex_script.py', line 8",
+      "expected_fix": "def process_data(data):\n    try:\n        return data['key']\n    except KeyError:\n        return None",
+      "test_input": "[{'not_key': 'value'}]",
+      "expected_result": "None"
+    }
+  }

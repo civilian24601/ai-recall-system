@@ -81,17 +81,18 @@ Engineer Agent Writes/refactors code—e.g., spins up tools from project_codebas
 QA Agent Tests fixes—validates against knowledge_base.
 Debug Agent Detects errors, applies fixes—logs to execution_logs (TBD).
 Oversight Agent Monitors, prevents failures—syncs global_knowledge_base (TBD).
-✅ Next: Stub agent.py, agent_manager.py—RAG loop live by Q2 2025.
+✅ Next: RAG loop live by Q2 2025.
 
 📌 System Architecture Overview
 🔹 Core Components
 Component Purpose
 Flask API (api_structure.py) Routes queries, execution (TBD—Phase 2).
 LM Studio (Local Models) Runs prompts/suggestions (planned integration).
-ChromaDB (chroma_db/) Vector storage—110 chunks (project_codebase), 266 (knowledge_base).
+ChromaDB (chroma_db/) Vector storage.
 Copilot/Continue.dev (VS Code AI) Real-time dev assist (*optional tool).
 CLI Commands (ai-recall, ai-debug) Manual recall/debug—evolving to agents.
-Knowledge Base (knowledge_base/) Docs, history—25 files, 266 chunks indexed.
+Knowledge Base (knowledge_base/) Docs, history.
+
 🚀 Current Setup:
 
 Chroma: /mnt/f/projects/ai-recall-system/chroma_db/, all-MiniLM-L6-v2 embeddings.
@@ -99,19 +100,16 @@ Logging: /logs/script_logs/—e.g., “Processed 105 files, 110 chunks”.
 Indexing: Watchers on /code_base/, header-based dedup for .md.
 📌 Future Roadmap
 Phase Goal AI Capability
-Phase 1: AI Recall & Debugging ✅ Store/retrieve work—376 chunks total. Passive recall—done.
-Phase 2: AI Self-Debugging ✅ Apply fixes automatically. Self-executing—Q2 2025.
-Phase 3: AI Self-Refactoring ✅ Improve code autonomously. Optimization—Q3 2025.
-Phase 4: Fully Autonomous AI ✅ Full project execution. Oversight only—2026.
-🚀 Endgame: Autonomous dev assistant—local, relentless, yours.
+Phase 1: AI Recall & Debugging ✅ Store/retrieve work. Passive recall—basically done.
+Phase 2: AI Self-Debugging ✅ Apply fixes automatically. Self-executing.
+Phase 3: AI Self-Refactoring ✅ Improve code autonomously. Optimization
+Phase 4: Fully Autonomous AI ✅ Full project execution. Oversight only.
+🚀 Endgame: Autonomous dev assistant—local, relentless, exceptionally accurate.
 
 📌 Summary
-✅ AI Recall: 110 code + 266 doc chunks live, queried via retrieve_codebase.py.
-
+✅ AI Recall: 110 code + 266 doc chunks live, queried via retrieve_codebase or aggregator_search.py.
 ✅ Debugging: Manual now—agents will close the loop (Issue #3, #4).
-
 ✅ Optimization: Best practices in knowledge_base, refactors TBD.
-
 ✅ Growth: From recall to autonomy—multi-agent city next.
 
 📅 Last Updated: March 4, 2025

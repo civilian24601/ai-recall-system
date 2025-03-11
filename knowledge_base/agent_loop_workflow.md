@@ -118,3 +118,14 @@ This workflow is designed for any debug scenario:
 - **Error Agnostic**: Handles SyntaxError, TimeoutError, MemoryError, etc., by adapting prompts and validation to the error type.
 - **Scalable**: multi_agent_workflow.py can parallelize tasks for multiple errors, leveraging the same structure.
 - **BELog-Driven**: Evolution and analysis adapt to new error patterns, ensuring robustness.
+
+UPDATE March 8 2025 -
+    Problems with using Regex in our engineer/reviewer pipeline:
+    Unusability for an AI Build Engine
+You’re correct that this makes the current solution unsuitable for a general-purpose "AI build engine" tasked with triaging and fixing any size or shape of code. An engine like that needs:
+
+Error Localization: Ability to pinpoint the exact function or line causing the error from the stack_trace.
+Modular Fixes: Capacity to apply fixes to specific sections (e.g., a function, a class method, or global code) without rewriting the entire script.
+Scalability: Handling large files with complex structures (nested functions, classes, decorators) and diverse error types.
+Robust Parsing: Tolerance for varied formatting (tabs, mixed indentation, inline bodies) and edge cases.
+The regex approach, while useful for prototyping, is too rigid and error-prone for these requirements. It’s a good choice for a controlled, narrow use case but falls apart as the codebase grows or diversifies.

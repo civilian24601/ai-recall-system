@@ -35,7 +35,7 @@ logger.setLevel(logging.DEBUG)
 
 # Create console handler
 console_handler = logging.StreamHandler(sys.stdout)
-console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - correlation_id:%(correlation_id)s - %(message)s'))
 logger.addHandler(console_handler)
 
 # Create file handler
@@ -43,7 +43,7 @@ try:
     log_dir = "/mnt/f/projects/ai-recall-system/logs"
     os.makedirs(log_dir, exist_ok=True)
     file_handler = logging.FileHandler(f"{log_dir}/agent_debug.log", mode='a')
-    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - correlation_id:%(correlation_id)s - %(message)s'))
     logger.addHandler(file_handler)
     logger.debug("Logging initialized successfully for agent.py")
 except Exception as e:
@@ -52,7 +52,8 @@ except Exception as e:
 
 class BuildAgent:
     def __init__(self, test_mode=False):
-        """Initialize the BuildAgent with test_mode support."""
+        """Initialize the BuildAgent with test_mode support and correlation ID."""
+        self.correlation_id = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         self.agent_manager = AgentManager()
         self.test_mode = test_mode
         self.max_attempts = 6
@@ -78,12 +79,12 @@ class BuildAgent:
 
         # Debug: Verify agent_manager has delegate_task
         if not hasattr(self.agent_manager, 'delegate_task'):
-            logger.error("AgentManager instance missing delegate_task method")
+            logger.error("AgentManager instance missing delegate_task method", extra={'correlation_id': self.correlation_id})
         else:
-            logger.debug("AgentManager instance has delegate_task method")
+            logger.debug("AgentManager instance has delegate_task method", extra={'correlation_id': self.correlation_id})
 
         print(
-            f"🔧 [BuildAgent __init__] Initialized with test_mode={self.test_mode}\n"
+            f"🔧 [BuildAgent __init__] Initialized with test_mode={self.test_mode}, correlation_id={self.correlation_id}\n"
             f"Project dir: {self.project_dir}\n"
             f"Collections initialized: {list(self.collections.keys())}\n"
             "AI-driven repair and blueprint execution ready."
@@ -97,21 +98,21 @@ class BuildAgent:
                     self.debug_logs = json.load(f)
             else:
                 self.debug_logs = []
-            logger.debug(f"Loaded debug logs: {self.debug_logs}")
+            logger.debug(f"Loaded debug logs: {self.debug_logs}", extra={'correlation_id': self.correlation_id})
         except Exception as e:
-            logger.error(f"Failed to load debug logs: {e}")
+            logger.error(f"Failed to load debug logs: {e}", extra={'correlation_id': self.correlation_id})
             self.debug_logs = []
 
     def log_entry(self, collection_name, entry_id, data):
         """Log an entry to the specified collection."""
         collection = self.collections[collection_name]
-        meta = {"timestamp": time.strftime("%Y-%m-%d %H:%M:%S"), "id": entry_id}
+        meta = {"timestamp": time.strftime("%Y-%m-%d %H:%M:%S"), "id": entry_id, "correlation_id": self.correlation_id}
         collection.upsert(
             ids=[entry_id],
             documents=[json.dumps(data)],
             metadatas=[meta]
         )
-        logger.info(f"Logged entry '{entry_id}' to {collection_name}")
+        logger.info(f"Logged entry '{entry_id}' to {collection_name}", extra={'correlation_id': self.correlation_id})
 
     def retrieve_context(self, query):
         """Retrieve context for the query using aggregator_search."""
@@ -121,35 +122,69 @@ class BuildAgent:
             code_context = [r["document"] for r in results if r.get("metadata", {}).get("filename", "").endswith(".py")]
             context = "\n".join(guidelines_context[:1] + code_context[:2])
             if not context:
-                logger.warning(f"No relevant context (guidelines or Python code) found for query: {query}")
+                logger.warning(f"No relevant context (guidelines or Python code) found for query: {query}", extra={'correlation_id': self.correlation_id})
                 guidelines_results = aggregator_search(query, top_n=1, mode="guidelines_code")
                 guidelines_context = [r["document"] for r in guidelines_results if r.get("metadata", {}).get("filename") == "ai_coding_guidelines.md"]
                 context = "\n".join(guidelines_context[:1])[:1000] if guidelines_context else ""
                 if not context:
-                    logger.error(f"Failed to retrieve any context for query: {query}")
+                    logger.error(f"Failed to retrieve any context for query: {query}", extra={'correlation_id': self.correlation_id})
             context = context[:1000] if len(context) > 1000 else context
-            logger.debug(f"Filtered context for query '{query}' (guidelines + Python, max 1000 chars): {context}...")
+            logger.debug(f"Filtered context for query '{query}' (guidelines + Python, max 1000 chars): {context}...", extra={'correlation_id': self.correlation_id})
             return context
         except Exception as e:
-            logger.error(f"Error retrieving context for query '{query}': {e}")
+            logger.error(f"Error retrieving context for query '{query}': {e}", extra={'correlation_id': self.correlation_id})
             return ""
 
     def reset_state(self):
-        """Reset test scripts and debug logs to their initial states."""
-        test_scripts = {
-            "test_script.py": """
+        """Reset test scripts and debug logs to their initial states using test suite."""
+        test_config_path = os.path.join(self.project_dir, "tests", "test_config.json")
+        if os.path.exists(test_config_path):
+            with open(test_config_path, "r") as f:
+                test_config = json.load(f)
+            test_ids = test_config.get("test_ids", [])
+            expected_results_path = os.path.join(self.project_dir, "tests", "expected_results.json")
+            if not os.path.exists(expected_results_path):
+                logger.error(f"Expected results file not found: {expected_results_path}", extra={'correlation_id': self.correlation_id})
+                return
+            with open(expected_results_path, "r") as f:
+                expected_results = json.load(f)
+            test_scripts = {}
+            debug_logs = []
+            for test_id in test_ids:
+                if test_id not in expected_results:
+                    logger.warning(f"Test ID {test_id} not found in expected_results.json", extra={'correlation_id': self.correlation_id})
+                    continue
+                test_data = expected_results[test_id]
+                script_path = os.path.join(self.project_dir, test_data["script"])
+                if not os.path.exists(script_path):
+                    logger.warning(f"Test script {script_path} not found for test ID {test_id}", extra={'correlation_id': self.correlation_id})
+                    continue
+                with open(script_path, "r") as f:
+                    script_content = f.read()
+                script_name = test_data["script"].split("/")[-1]
+                test_scripts[script_name] = script_content
+                debug_logs.append({
+                    "id": test_id,
+                    "error": test_data["error"],
+                    "stack_trace": test_data["stack_trace"],
+                    "resolved": False
+                })
+        else:
+            logger.warning("Test config not found, falling back to default test scripts", extra={'correlation_id': self.correlation_id})
+            test_scripts = {
+                "test_script.py": """
 def divide(a, b):
     return a / b  # Fails on b=0
 """,
-            "user_auth.py": """
+                "user_auth.py": """
 def authenticate_user(user_data):
     return user_data["username"]  # Fails if 'username' missing
 """
-        }
-        debug_logs = [
-            {"id": "test1", "error": "ZeroDivisionError", "stack_trace": "File 'test_script.py', line 3", "resolved": False},
-            {"id": "test2", "error": "KeyError", "stack_trace": "File 'user_auth.py', line 5", "resolved": False}
-        ]
+            }
+            debug_logs = [
+                {"id": "test1", "error": "ZeroDivisionError", "stack_trace": "File 'test_script.py', line 3", "resolved": False},
+                {"id": "test2", "error": "KeyError", "stack_trace": "File 'user_auth.py', line 5", "resolved": False}
+            ]
 
         for script_name, content in test_scripts.items():
             backup_path = os.path.join(self.backup_dir, script_name)
@@ -164,18 +199,18 @@ def authenticate_user(user_data):
 
         with open(self.debug_log_file, "w") as f:
             json.dump(debug_logs, f, indent=4)
-        logger.debug(f"Reset debug logs to: {json.dumps(debug_logs, indent=4)}")
-        logger.info("Reset test scripts and debug logs to initial states.")
+        logger.debug(f"Reset debug logs to: {json.dumps(debug_logs, indent=4)}", extra={'correlation_id': self.correlation_id})
+        logger.info("Reset test scripts and debug logs to initial states.", extra={'correlation_id': self.correlation_id})
 
     def run(self):
         """Run the agent to process unresolved issues with retry logic."""
-        logger.info("Starting Build Agent with blueprint-driven execution and RAG for ai_coding_guidelines.md...")
+        logger.info("Starting Build Agent with blueprint-driven execution and RAG for ai_coding_guidelines.md...", extra={'correlation_id': self.correlation_id})
         
         self.reset_state()
         
         blueprint_path = f"{self.project_dir}/blueprints/agent_blueprint_v1.json"
         if not os.path.exists(blueprint_path):
-            logger.error(f"Blueprint not found: {blueprint_path}")
+            logger.error(f"Blueprint not found: {blueprint_path}", extra={'correlation_id': self.correlation_id})
             return
 
         with open(blueprint_path, "r") as f:
@@ -188,7 +223,7 @@ def authenticate_user(user_data):
             unresolved = [log for log in logs if not log.get("resolved", False)]
             
             if not unresolved:
-                logger.info("No unresolved issues—exiting.")
+                logger.info("No unresolved issues—exiting.", extra={'correlation_id': self.correlation_id})
                 break
             
             for log in unresolved:
@@ -199,50 +234,51 @@ def authenticate_user(user_data):
 
                 script_name = stack_trace.split("'")[1] if "'" in stack_trace else None
                 if not script_name:
-                    logger.warning(f"Skipping log {error_id}—no script")
+                    logger.warning(f"Skipping log {error_id}—no script", extra={'correlation_id': self.correlation_id})
                     continue
 
                 script_path = os.path.join(self.project_dir, "code_base/test_scripts", script_name)
                 if not os.path.exists(script_path):
-                    logger.warning(f"Script {script_name} not found—skipping")
+                    logger.warning(f"Script {script_name} not found—skipping", extra={'correlation_id': self.correlation_id})
                     continue
 
                 with open(script_path, "r") as f:
                     script_content = f.read()
 
                 context = self.retrieve_context(f"{error} in {script_name}")
-                logger.info(f"Filtered context for {error_id} (guidelines + Python, max 1000 chars): {context}...")
+                logger.info(f"Filtered context for {error_id} (guidelines + Python, max 1000 chars): {context}...", extra={'correlation_id': self.correlation_id})
 
                 task_prompt = (
                     f"Please debug the following script and return ONLY the COMPLETE fixed function in Python using a FULL try/except block "
                     f"with the appropriate except clause to handle the error ({error}), returning None, with NO extra logic, NO prose, "
                     f"and NO explanations, inside ```python\n{script_content}\n```."
                 )
-                fix = self.agent_manager.delegate_task("engineer", task_prompt, timeout=300)
-                logger.debug(f"Debug: Engineer's fix for {error_id}: {fix}")
+                fix = self.agent_manager.delegate_task("engineer", task_prompt, timeout=300, correlation_id=self.correlation_id)
+                logger.debug(f"Debug: Engineer's fix for {error_id}: {fix}", extra={'correlation_id': self.correlation_id})
 
                 if fix is None or not fix.strip():
                     if attempt_count < self.max_attempts:
-                        logger.warning(f"No valid fix for {error_id} after {attempt_count} attempts. Retrying...")
+                        logger.warning(f"No valid fix for {error_id} after {attempt_count} attempts. Retrying...", extra={'correlation_id': self.correlation_id})
                         fix = self.agent_manager.delegate_task(
                             "engineer",
                             f"Please debug the following script and return ONLY the COMPLETE fixed function in Python using a FULL try/except block "
                             f"with the appropriate except clause to handle the error ({error}), returning None, with NO extra logic, NO prose, "
                             f"and NO explanations, inside ```python\n{script_content}\n```.",
-                            timeout=360
+                            timeout=360,
+                            correlation_id=self.correlation_id
                         )
                     else:
-                        logger.error(f"Max attempts reached for {error_id}—skipping fix to preserve script.")
+                        logger.error(f"Max attempts reached for {error_id}—skipping fix to preserve script.", extra={'correlation_id': self.correlation_id})
                         fix = None
                 elif not isinstance(fix, str) or not fix.strip():
-                    logger.warning(f"Invalid fix format for {error_id}—skipping fix.")
+                    logger.warning(f"Invalid fix format for {error_id}—skipping fix.", extra={'correlation_id': self.correlation_id})
                     fix = None
                 
                 if fix and "```python" in fix:
                     try:
                         fix = re.search(r"```python\s*(.*?)\s*```", fix, re.DOTALL).group(1).strip()
                     except AttributeError:
-                        logger.warning(f"Fix for {error_id} not in expected ```python``` format—using raw response.")
+                        logger.warning(f"Fix for {error_id} not in expected ```python``` format—using raw response.", extra={'correlation_id': self.correlation_id})
                         fix = fix if isinstance(fix, str) else None
                 else:
                     fix = fix if isinstance(fix, str) and fix.strip() else None
@@ -254,8 +290,8 @@ def authenticate_user(user_data):
                         f"Return ONLY the COMPLETE fixed function in Python using a FULL try/except block with the appropriate except clause "
                         f"to handle the error ({error}), returning None, with NO extra logic, NO prose, and NO explanations, inside ```python ... ```."
                     )
-                    reviewed_fix = self.agent_manager.delegate_task("reviewer", review_prompt, timeout=300)
-                    logger.debug(f"Debug: Reviewed fix for {error_id}: {reviewed_fix}")
+                    reviewed_fix = self.agent_manager.delegate_task("reviewer", review_prompt, timeout=300, correlation_id=self.correlation_id)
+                    logger.debug(f"Debug: Reviewed fix for {error_id}: {reviewed_fix}", extra={'correlation_id': self.correlation_id})
 
                 final_fix = fix if fix and fix.strip() else None
                 if reviewed_fix and isinstance(reviewed_fix, str) and reviewed_fix.strip():
@@ -264,16 +300,16 @@ def authenticate_user(user_data):
                             reviewed_fix = re.search(r"```python\s*(.*?)\s*```", reviewed_fix, re.DOTALL).group(1).strip()
                             final_fix = reviewed_fix
                         except AttributeError:
-                            logger.warning(f"Reviewed fix for {error_id} not in expected ```python``` format—using original fix.")
+                            logger.warning(f"Reviewed fix for {error_id} not in expected ```python``` format—using original fix.", extra={'correlation_id': self.correlation_id})
                     else:
                         final_fix = reviewed_fix
 
-                logger.debug(f"Debug: Final fix for {error_id}: {final_fix}")
+                logger.debug(f"Debug: Final fix for {error_id}: {final_fix}", extra={'correlation_id': self.correlation_id})
 
                 temp_script_path = script_path + ".tmp"
                 if os.path.exists(temp_script_path):
                     os.remove(temp_script_path)
-                    logger.debug(f"Cleaned up existing temp file: {temp_script_path}")
+                    logger.debug(f"Cleaned up existing temp file: {temp_script_path}", extra={'correlation_id': self.correlation_id})
 
                 fix_works = False
                 fix_error = "No validation performed"
@@ -289,7 +325,7 @@ def authenticate_user(user_data):
                         else:
                             f.write(final_fix + "\n" + original_content)
 
-                logger.debug(f"Calling run_blueprint for {error_id} with original_error: {error}, script_path: {script_path}")
+                logger.debug(f"Calling run_blueprint for {error_id} with original_error: {error}, script_path: {script_path}", extra={'correlation_id': self.correlation_id})
 
                 blueprint_id = f"bp_fix_{error_id}"
                 execution_trace_id, validation_result = self.blueprint_executor.run_blueprint(
@@ -299,7 +335,8 @@ def authenticate_user(user_data):
                     execution_context=context,
                     final_fix=final_fix,
                     original_error=error if error else "Unknown error",
-                    stack_trace=stack_trace
+                    stack_trace=stack_trace,
+                    correlation_id=self.correlation_id
                 )
                 
                 if execution_trace_id:
@@ -323,24 +360,25 @@ def authenticate_user(user_data):
                         "execution_trace_id": execution_trace_id,
                         "test_result": "Success" if fix_works else f"Failed: {fix_error}",
                         "attempts": attempt_count,
-                        "test_input": str(validation_result.get("test_input", "N/A")),  # From blueprint_executor
-                        "expected_result": str(validation_result.get("expected_result", "N/A"))  # From blueprint_executor
+                        "test_input": str(validation_result.get("test_input", "N/A")),
+                        "expected_result": str(validation_result.get("expected_result", "N/A")),
+                        "correlation_id": self.correlation_id
                     }
                     self.log_entry("debugging_logs", error_id, log_entry)
                     
                     reindex_single_file(script_path, self.collections["project_codebase"], self.embed_model)
-                    logger.info(f"Reindexed {script_path}")
+                    logger.info(f"Reindexed {script_path}", extra={'correlation_id': self.correlation_id})
                     
                     logs = [l if l["id"] != error_id else log_entry for l in logs]
                     with open(self.debug_log_file, "w") as f:
                         json.dump(logs, f, indent=4)
-                    logger.debug(f"Updated debug logs for {error_id}: {json.dumps(log_entry, indent=4)}")
+                    logger.debug(f"Updated debug logs for {error_id}: {json.dumps(log_entry, indent=4)}", extra={'correlation_id': self.correlation_id})
 
             if attempt_count >= self.max_attempts:
-                logger.error("Max attempts reached for unresolved issues—exiting.")
+                logger.error("Max attempts reached for unresolved issues—exiting.", extra={'correlation_id': self.correlation_id})
                 break
 
-        logger.info("Completed run and reset state for next test.")
+        logger.info("Completed run and reset state for next test.", extra={'correlation_id': self.correlation_id})
         self.reset_state()
 
 if __name__ == "__main__":
@@ -352,5 +390,5 @@ if __name__ == "__main__":
         agent.reset_state()
     except Exception as e:
         print(f"⚠️ Unexpected error: {e}")
-        logger.error(f"Unexpected error: {e}, traceback: {traceback.format_exc()}")
+        logger.error(f"Unexpected error: {e}, traceback: {traceback.format_exc()}", extra={'correlation_id': agent.correlation_id})
         agent.reset_state()

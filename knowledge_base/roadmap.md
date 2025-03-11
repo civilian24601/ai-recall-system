@@ -4,7 +4,7 @@
 
 This roadmap tracks the development of the AI Recall System—a self-learning, local AI kernel for solopreneurs. Current as of March 4, 2025.
 
-## 🚀 Phase 1: Foundation (In Progress)
+## 🚀 Phase 1: Foundation (Mostly Done)
 
 - **Goal**: Build indexing backbone for code and knowledge.
 - **Status**:
@@ -13,17 +13,17 @@ This roadmap tracks the development of the AI Recall System—a self-learning, l
   - `index_knowledgebase.py`: Indexes `/knowledge_base/` and `/agent_knowledge_bases/` (266 chunks in `knowledge_base`).
     - Header-based chunking (~500 chars), dedup by mtime/hash, logs to `/logs/script_logs/index_knowledgebase.log`.
 - **Next**:
-  - [ ] Polish `index_knowledgebase.py` test mode (Issue #5).
-  - [ ] Separate test/prod data (Issue #3).
+  - [ ] Polish `index_knowledgebase.py` test mode (done).
+  - [ ] Separate test/prod data (done).
 
-## 🤖 Phase 2: Agent System (Next)
+## 🤖 Phase 2: Agent System (In Progress)
 
 - **Goal**: Autonomous agents querying Chroma for debugging and iteration.
 - **Tasks**:
-  - [ ] Stub `agent.py` (engineer: query `project_codebase`, propose fixes).
-  - [ ] Stub `agent_manager.py` (reviewer: validate, commit fixes).
-  - [ ] Blueprint in `blueprints/agent_blueprint_v1.json`.
-- **Milestone**: Basic RAG loop (query, fix, log), handling timeouts (Issue #4).
+  - [ ] refine `agent.py` (engineer: query `project_codebase`, propose fixes).
+  - [ ] refine `agent_manager.py` (reviewer: validate, commit fixes).
+  - [ ] refine Blueprint in `blueprints/agent_blueprint_v1.json`.
+- **Milestone**: Basic RAG loop (query, fix, log), handling timeouts.(current).
 
 ## 💰 Phase 3: Tool Deployment
 
@@ -55,7 +55,7 @@ This roadmap tracks the development of the AI Recall System—a self-learning, l
   - Code: 105 files, 110 chunks (`project_codebase`).
   - Knowledge: 25 files, 266 chunks (`knowledge_base`).
 - **Logging**: Scripts log to `/logs/script_logs/`.
-- **Pending**: Agent stubs, test/prod split, doc updates (Issue #1).
+- **Pending**: Agent stubs and revisions, test/prod split, doc updates (Issue #1).
 
 ## 🌌 Long-Term Vision
 

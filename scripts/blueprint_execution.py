@@ -31,7 +31,7 @@ logger.setLevel(logging.DEBUG)
 
 # Create console handler
 console_handler = logging.StreamHandler(sys.stdout)
-console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - correlation_id:%(correlation_id)s - %(message)s'))
 logger.addHandler(console_handler)
 
 # Create file handler
@@ -39,7 +39,7 @@ try:
     log_dir = "/mnt/f/projects/ai-recall-system/logs"
     os.makedirs(log_dir, exist_ok=True)
     file_handler = logging.FileHandler(f"{log_dir}/blueprint_debug.log", mode='a')
-    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - correlation_id:%(correlation_id)s - %(message)s'))
     logger.addHandler(file_handler)
     logger.debug("Logging initialized successfully for blueprint_execution.py")
 except Exception as e:
@@ -71,63 +71,64 @@ class BlueprintExecution:
             "LLM-based improvement notes enabled with agent_manager."
         )
 
-    def run_blueprint(self, blueprint_id, task_name, script_path, execution_context, final_fix=None, original_error=None, stack_trace=None):
+    def run_blueprint(self, blueprint_id, task_name, script_path, execution_context, final_fix=None, original_error=None, stack_trace=None, correlation_id=None):
         """Executes a blueprint task, logs BELog, evolves if improved."""
         print(f"⚙️ Running blueprint {blueprint_id}: {task_name}")
         
         logger.debug(f"Entering run_blueprint with blueprint_id: {blueprint_id}, task_name: {task_name}, script_path: {script_path}, "
-                     f"final_fix: {final_fix}, original_error: {original_error}, stack_trace: {stack_trace}")
+                     f"final_fix: {final_fix}, original_error: {original_error}, stack_trace: {stack_trace}", extra={'correlation_id': correlation_id})
 
         start_time = time.time()
         temp_script_path = script_path + ".tmp"
         try:
-            logger.debug(f"Starting blueprint execution for task '{task_name}' with script_path: {script_path}, original_error: {original_error}")
+            logger.debug(f"Starting blueprint execution for task '{task_name}' with script_path: {script_path}, original_error: {original_error}", extra={'correlation_id': correlation_id})
 
             if task_name == "Apply fix":
                 if not final_fix:
-                    logger.error("final_fix is required for 'Apply fix' task")
+                    logger.error("final_fix is required for 'Apply fix' task", extra={'correlation_id': correlation_id})
                     raise ValueError("final_fix is required for 'Apply fix' task")
                 
-                logger.debug(f"Copying script {script_path} to temp file {temp_script_path}")
+                logger.debug(f"Copying script {script_path} to temp file {temp_script_path}", extra={'correlation_id': correlation_id})
                 shutil.copy(script_path, temp_script_path)
                 with open(temp_script_path, "r") as f:
                     original_content = f.read()
-                logger.debug(f"Original content of {temp_script_path}: {original_content}")
+                logger.debug(f"Original content of {temp_script_path}: {original_content}", extra={'correlation_id': correlation_id})
                 with open(temp_script_path, "w") as f:
                     f.write(final_fix + "\n")
-                logger.debug(f"Updated content of {temp_script_path} with fix: {final_fix}")
+                logger.debug(f"Updated content of {temp_script_path} with fix: {final_fix}", extra={'correlation_id': correlation_id})
 
-                logger.debug(f"Validating fix for {script_path} with original_error: {original_error}")
+                logger.debug(f"Validating fix for {script_path} with original_error: {original_error}", extra={'correlation_id': correlation_id})
                 fix_works = False
                 fix_error = "No validation performed"
                 try:
                     fix_works, fix_error = self.agent_manager.test_fix(temp_script_path, original_error, stack_trace, final_fix)
-                    logger.debug(f"Validation result for {script_path}: fix_works={fix_works}, fix_error={fix_error}")
+                    logger.debug(f"Validation result for {script_path}: fix_works={fix_works}, fix_error={fix_error}", extra={'correlation_id': correlation_id})
                 except Exception as e:
-                    logger.error(f"Validation failed for {script_path}: {e}, traceback: {traceback.format_exc()}")
+                    logger.error(f"Validation failed for {script_path}: {e}, traceback: {traceback.format_exc()}", extra={'correlation_id': correlation_id})
                     fix_error = str(e)
                 finally:
-                    logger.debug(f"Final validation result: fix_works={fix_works}, fix_error={fix_error}")
+                    logger.debug(f"Final validation result: fix_works={fix_works}, fix_error={fix_error}", extra={'correlation_id': correlation_id})
                 
                 if fix_works:
-                    logger.debug(f"Validation passed, applying fix by moving {temp_script_path} to {script_path}")
+                    logger.debug(f"Validation passed, applying fix by moving {temp_script_path} to {script_path}", extra={'correlation_id': correlation_id})
                     shutil.move(temp_script_path, script_path)
-                    logger.info(f"Applied valid fix to {script_path}")
+                    logger.info(f"Applied valid fix to {script_path}", extra={'correlation_id': correlation_id})
                     task_result = final_fix
                     success = True
                 else:
                     if os.path.exists(temp_script_path):
                         os.remove(temp_script_path)
-                        logger.debug(f"Cleaned up temp file after validation failure: {temp_script_path}")
-                    logger.warning(f"Fix for {task_name} failed validation: {fix_error}—preserving original script.")
+                        logger.debug(f"Cleaned up temp file after validation failure: {temp_script_path}", extra={'correlation_id': correlation_id})
+                    logger.warning(f"Fix for {task_name} failed validation: {fix_error}—preserving original script.", extra={'correlation_id': correlation_id})
                     task_result = None
                     success = False
             else:
-                logger.debug(f"Task '{task_name}' is not 'Apply fix', delegating to engineer")
+                logger.debug(f"Task '{task_name}' is not 'Apply fix', delegating to engineer", extra={'correlation_id': correlation_id})
                 task_result = self.agent_manager.delegate_task(
                     "engineer",
                     f"Execute task '{task_name}' on script {script_path} with context: {execution_context}",
-                    timeout=300
+                    timeout=300,
+                    correlation_id=correlation_id
                 )
                 success = task_result and "def placeholder" not in task_result
 
@@ -135,7 +136,7 @@ class BlueprintExecution:
             errors = "None" if task_result and "def placeholder" not in task_result else "Task execution failed" if not success else "None"
             efficiency_score = int(100 - (execution_time * 10)) if success else 20
             
-            logger.debug(f"Logging execution result: success={success}, errors={errors}, efficiency_score={efficiency_score}")
+            logger.debug(f"Logging execution result: success={success}, errors={errors}, efficiency_score={efficiency_score}", extra={'correlation_id': correlation_id})
             execution_trace_id = self.log_execution(
                 blueprint_id=blueprint_id,
                 task_name=task_name,
@@ -148,23 +149,24 @@ class BlueprintExecution:
                 errors=errors,
                 success=success,
                 efficiency_score=efficiency_score,
-                improvement_suggestions="None" if success else "Adjust execution logic"
+                improvement_suggestions="None" if success else "Adjust execution logic",
+                correlation_id=correlation_id
             )
             
             self.evolve_blueprint(blueprint_id, execution_trace_id, success)
-            logger.debug(f"Completed run_blueprint for {blueprint_id}, returning execution_trace_id: {execution_trace_id}")
+            logger.debug(f"Completed run_blueprint for {blueprint_id}, returning execution_trace_id: {execution_trace_id}", extra={'correlation_id': correlation_id})
             return execution_trace_id, {
                 "fix_works": fix_works,
                 "fix_error": fix_error if not fix_works else "",
-                "test_input": getattr(self.agent_manager, 'test_input', 'N/A'),  # Pass test input from agent_manager
-                "expected_result": getattr(self.agent_manager, 'expected_result', 'N/A')  # Pass expected result from agent_manager
+                "test_input": getattr(self.agent_manager, 'test_input', 'N/A'),
+                "expected_result": getattr(self.agent_manager, 'expected_result', 'N/A')
             }
         except Exception as e:
             print(f"⚠️ Blueprint execution failed: {e}")
-            logger.error(f"Exception in run_blueprint: {e}, traceback: {traceback.format_exc()}")
+            logger.error(f"Exception in run_blueprint: {e}, traceback: {traceback.format_exc()}", extra={'correlation_id': correlation_id})
             if os.path.exists(temp_script_path):
                 os.remove(temp_script_path)
-                logger.debug(f"Cleaned up temp file after failure: {temp_script_path}")
+                logger.debug(f"Cleaned up temp file after failure: {temp_script_path}", extra={'correlation_id': correlation_id})
             execution_time = time.time() - start_time
             return self.log_execution(
                 blueprint_id=blueprint_id,
@@ -178,10 +180,11 @@ class BlueprintExecution:
                 errors=str(e),
                 success=False,
                 efficiency_score=10,
-                improvement_suggestions="Debug execution failure"
+                improvement_suggestions="Debug execution failure",
+                correlation_id=correlation_id
             ), {"fix_works": False, "fix_error": str(e)}
 
-    def log_execution(self, blueprint_id, task_name, execution_context, expected_outcome, execution_time, files_changed, dependencies, pipeline_connections, errors, success, efficiency_score, improvement_suggestions):
+    def log_execution(self, blueprint_id, task_name, execution_context, expected_outcome, execution_time, files_changed, dependencies, pipeline_connections, errors, success, efficiency_score, improvement_suggestions, correlation_id=None):
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         execution_trace_id = f"log_{timestamp.replace(' ', '_')}"
         blueprint_version = self.get_latest_blueprint_version(blueprint_id)
@@ -212,7 +215,8 @@ class BlueprintExecution:
             "potential_breakage_risk": "High" if not success else "Low",
             "cross_check_required": "Yes" if (not success or dependencies) else "No",
             "previous_attempts": [at["execution_trace_id"] for at in past_attempts],
-            "improvement_suggestions": improvement_suggestions or "None"
+            "improvement_suggestions": improvement_suggestions or "None",
+            "correlation_id": correlation_id
         }
 
         self.collections["execution_logs"].add(
@@ -224,7 +228,8 @@ class BlueprintExecution:
                 "timestamp": timestamp,
                 "success": success,
                 "errors_encountered": errors or "None",
-                "efficiency_score": int(efficiency_score)
+                "efficiency_score": int(efficiency_score),
+                "correlation_id": correlation_id
             }]
         )
         print(f"✅ Execution log stored: {execution_trace_id}")
@@ -238,6 +243,7 @@ class BlueprintExecution:
         
         log_data = json.loads(log_result["documents"][0])
         improvement_suggestions = log_data["improvement_suggestions"]
+        correlation_id = log_data.get("correlation_id")
         
         if success or improvement_suggestions != "None":
             current_version = self.get_latest_blueprint_version(blueprint_id)
@@ -251,7 +257,8 @@ class BlueprintExecution:
                 "task_name": log_data["task_name"],
                 "execution_context": log_data["execution_context"],
                 "improvements": improvement_suggestions,
-                "last_execution": execution_trace_id
+                "last_execution": execution_trace_id,
+                "correlation_id": correlation_id
             }
             self.collections["blueprint_versions"].add(
                 ids=[f"{blueprint_id}_{new_version}"],

@@ -5,7 +5,7 @@ The AI Recall System is a local, autonomous AI kernel that builds, iterates, and
 
 ## 🎯 Goals
 - **MVP**: A self-building app—autonomous feature adds, refactoring, full awareness via Chroma (110 code + 266 doc chunks as of 03/04/2025).
-- **Scale**: Multi-project ecosystem—SaaS-level robustness, sharing a `global_knowledge_base`.
+- **Scale**: Multi-project ecosystem, sharing a `global_knowledge_base`.
 - **Learning**: Logs, blueprints, and errors fuel a recursive intelligence—smarter with every commit.
 
 ## 🚀 MVP Roadmap (Q2 2025)
@@ -63,7 +63,7 @@ The `global_knowledge_base` is the crown jewel—a solopreneur’s eternal geniu
 - **Autonomy**: Kernel spawns projects—e.g., micro-tool today, SaaS tomorrow, all self-built.
 
 ### 📌 Endgame
-- **Empire**: A solopreneur’s billion-dollar toolkit—local, custom, free of API shackles.  
+- **Empire**: A solopreneur’s multi-million-dollar toolkit—local, custom, free of API shackles.  
 - **Income**: Passive streams stack—tools ($10-$50), SaaS ($20/month), each project a brick in the palace.  
 - **Legacy**: A memory palace for the plebs—every lesson etched, every win scaled, a force multiplier for one coder to rule them all.
 

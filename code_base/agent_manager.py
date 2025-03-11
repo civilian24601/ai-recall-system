@@ -24,7 +24,7 @@ from datetime import datetime
 sys.path.append("/mnt/f/projects/ai-recall-system")
 
 from code_base.network_utils import detect_api_url
-from code_base.test_case_generator import get_error_handler  # Import the new test case generator
+from code_base.test_case_generator import get_error_handler
 
 # Configure logging with a dedicated logger for agent_manager.py
 logger = logging.getLogger('agent_manager')
@@ -32,7 +32,7 @@ logger.setLevel(logging.DEBUG)
 
 # Create console handler
 console_handler = logging.StreamHandler(sys.stdout)
-console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - correlation_id:%(correlation_id)s - %(message)s'))
 logger.addHandler(console_handler)
 
 # Create file handler
@@ -40,7 +40,7 @@ try:
     log_dir = "/mnt/f/projects/ai-recall-system/logs"
     os.makedirs(log_dir, exist_ok=True)
     file_handler = logging.FileHandler(f"{log_dir}/agent_manager_debug.log", mode='a')
-    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - correlation_id:%(correlation_id)s - %(message)s'))
     logger.addHandler(file_handler)
     logger.debug("Logging initialized successfully for agent_manager.py")
 except Exception as e:
@@ -67,26 +67,27 @@ class AgentManager:
         self.max_retries = 3
         self.test_input = None
         self.expected_result = None
+        self.correlation_id = None  # Will be set by BuildAgent
 
     def test_fix(self, script_path, original_error, stack_trace, fix):
         """Test if the fix handles the original error using AST for parsing and modification."""
-        logger.debug(f"Starting test_fix for script_path: {script_path}, original_error: {original_error}, stack_trace: {stack_trace}")
+        logger.debug(f"Starting test_fix for script_path: {script_path}, original_error: {original_error}, stack_trace: {stack_trace}", extra={'correlation_id': self.correlation_id})
         try:
             with open(script_path, "r") as f:
                 script_content = f.read()
-            logger.debug(f"Original script content: {script_content}")
+            logger.debug(f"Original script content: {script_content}", extra={'correlation_id': self.correlation_id})
 
             # Parse the script into an AST
             tree = ast.parse(script_content)
-            logger.debug("Parsed script into AST")
+            logger.debug("Parsed script into AST", extra={'correlation_id': self.correlation_id})
 
             # Extract the line number from the stack_trace
             line_match = re.search(r"line (\d+)", stack_trace)
             if not line_match:
-                logger.error("Could not extract line number from stack_trace")
+                logger.error("Could not extract line number from stack_trace", extra={'correlation_id': self.correlation_id})
                 return False, "Invalid stack_trace format"
             error_line = int(line_match.group(1))
-            logger.debug(f"Error line from stack_trace: {error_line}")
+            logger.debug(f"Error line from stack_trace: {error_line}", extra={'correlation_id': self.correlation_id})
 
             # Find the function containing the error line
             target_func = None
@@ -96,23 +97,23 @@ class AgentManager:
                         target_func = node
                         break
             if not target_func:
-                logger.error("No function found containing the error line")
+                logger.error("No function found containing the error line", extra={'correlation_id': self.correlation_id})
                 return False, "No function found at error line"
 
             func_name = target_func.name
-            logger.debug(f"Found target function: {func_name} at lines {target_func.lineno}-{target_func.end_lineno}")
+            logger.debug(f"Found target function: {func_name} at lines {target_func.lineno}-{target_func.end_lineno}", extra={'correlation_id': self.correlation_id})
 
             # Parse the AI-generated fix and apply it to the target function
             fix_tree = ast.parse(fix)
             if not fix_tree.body or not isinstance(fix_tree.body[0], ast.FunctionDef):
-                logger.error("Fix does not contain a valid function definition")
+                logger.error("Fix does not contain a valid function definition", extra={'correlation_id': self.correlation_id})
                 return False, "Invalid fix format"
             fix_func = fix_tree.body[0]
             if fix_func.name != func_name:
-                logger.error(f"Fix function name {fix_func.name} does not match target function {func_name}")
+                logger.error(f"Fix function name {fix_func.name} does not match target function {func_name}", extra={'correlation_id': self.correlation_id})
                 return False, "Fix function name mismatch"
             target_func.body = fix_func.body  # Replace the body of the target function with the fixed body
-            logger.debug(f"Applied fix to function {func_name}")
+            logger.debug(f"Applied fix to function {func_name}", extra={'correlation_id': self.correlation_id})
 
             # Extract argument names for dynamic test case generation
             arg_names = [arg.arg for arg in target_func.args.args]
@@ -123,7 +124,7 @@ class AgentManager:
             # Generate test case dynamically
             self.test_input, self.expected_result = handler.generate_test_case(arg_names)  # Store as instance attributes
             if self.test_input is None:
-                logger.error(f"No test case defined for {original_error}")
+                logger.error(f"No test case defined for {original_error}", extra={'correlation_id': self.correlation_id})
                 return False, f"No test case for {original_error}"
 
             # Generate the test call
@@ -156,12 +157,12 @@ if __name__ == "__main__":
 
             # Unparse the test script with correct formatting
             test_code = ast.unparse(test_module)
-            logger.debug(f"Generated test code: {test_code}")
+            logger.debug(f"Generated test code: {test_code}", extra={'correlation_id': self.correlation_id})
 
             temp_test_path = script_path + ".test"
             with open(temp_test_path, "w") as f:
                 f.write(test_code)
-            logger.debug(f"Wrote test script to: {temp_test_path}")
+            logger.debug(f"Wrote test script to: {temp_test_path}", extra={'correlation_id': self.correlation_id})
 
             try:
                 process = subprocess.run(
@@ -170,44 +171,44 @@ if __name__ == "__main__":
                     text=True,
                     timeout=30
                 )
-                logger.debug(f"Subprocess completed: returncode={process.returncode}, stdout={process.stdout}, stderr={process.stderr}")
+                logger.debug(f"Subprocess completed: returncode={process.returncode}, stdout={process.stdout}, stderr={process.stderr}", extra={'correlation_id': self.correlation_id})
             except subprocess.TimeoutExpired as e:
-                logger.error(f"Subprocess timeout: {e}")
+                logger.error(f"Subprocess timeout: {e}", extra={'correlation_id': self.correlation_id})
                 if os.path.exists(temp_test_path):
                     os.remove(temp_test_path)
-                    logger.debug(f"Cleaned up test script after timeout: {temp_test_path}")
+                    logger.debug(f"Cleaned up test script after timeout: {temp_test_path}", extra={'correlation_id': self.correlation_id})
                 return False, "Timeout: Script hung"
             except subprocess.SubprocessError as e:
-                logger.error(f"Subprocess error: {e}, traceback: {traceback.format_exc()}")
+                logger.error(f"Subprocess error: {e}, traceback: {traceback.format_exc()}", extra={'correlation_id': self.correlation_id})
                 if os.path.exists(temp_test_path):
                     os.remove(temp_test_path)
-                    logger.debug(f"Cleaned up test script after subprocess error: {temp_test_path}")
+                    logger.debug(f"Cleaned up test script after subprocess error: {temp_test_path}", extra={'correlation_id': self.correlation_id})
                 return False, f"Subprocess error: {str(e)}"
 
             if os.path.exists(temp_test_path):
                 os.remove(temp_test_path)
-                logger.debug(f"Cleaned up test script: {temp_test_path}")
+                logger.debug(f"Cleaned up test script: {temp_test_path}", extra={'correlation_id': self.correlation_id})
 
             output = process.stdout.strip()
-            logger.debug(f"Subprocess output: {output}")
+            logger.debug(f"Subprocess output: {output}", extra={'correlation_id': self.correlation_id})
             if "Test result: Success" in output:
-                logger.debug("Fix validated successfully")
+                logger.debug("Fix validated successfully", extra={'correlation_id': self.correlation_id})
                 return True, ""
             else:
                 error_msg = process.stderr or "Fix did not handle the original error"
-                logger.debug(f"Fix validation failed: {error_msg}")
+                logger.debug(f"Fix validation failed: {error_msg}", extra={'correlation_id': self.correlation_id})
                 return False, error_msg
 
         except Exception as e:
-            logger.error(f"Error in test_fix: {e}, traceback: {traceback.format_exc()}")
+            logger.error(f"Error in test_fix: {e}, traceback: {traceback.format_exc()}", extra={'correlation_id': self.correlation_id})
             if 'temp_test_path' in locals() and os.path.exists(temp_test_path):
                 os.remove(temp_test_path)
-                logger.debug(f"Cleaned up test script after error: {temp_test_path}")
+                logger.debug(f"Cleaned up test script after error: {temp_test_path}", extra={'correlation_id': self.correlation_id})
             return False, f"Test execution failed: {str(e)}"
 
     def send_task(self, agent, task_prompt, timeout=300):
         model = self.agents.get(agent, "codestral-22b-v0.1")
-        logger.debug(f"Sending task to {agent} ({model}) with prompt: {task_prompt}")
+        logger.debug(f"Sending task to {agent} ({model}) with prompt: {task_prompt}", extra={'correlation_id': self.correlation_id})
         try:
             full_prompt = (
                 f"{task_prompt}\n\n"
@@ -234,17 +235,17 @@ if __name__ == "__main__":
             else:
                 response_text = re.sub(r"<think>.*?</think>|\s*This solution:.*$", "", response_text, flags=re.DOTALL).strip()
             print(f"Raw response from {agent} ({model}): {response_text}")
-            logger.debug(f"Received response: {response_text}")
+            logger.debug(f"Received response: {response_text}", extra={'correlation_id': self.correlation_id})
             return response_text if response_text else f"❌ Empty response from {agent} ({model})."
         except requests.exceptions.Timeout:
-            logger.error(f"Request timeout: {agent} ({model}) - {timeout}s")
+            logger.error(f"Request timeout: {agent} ({model}) - {timeout}s", extra={'correlation_id': self.correlation_id})
             return f"❌ Timeout: {agent} ({model}) - {timeout}s"
         except requests.exceptions.RequestException as e:
-            logger.error(f"API error: {agent} ({model}) - {e}")
+            logger.error(f"API error: {agent} ({model}) - {e}", extra={'correlation_id': self.correlation_id})
             return f"❌ API Error: {agent} ({model}) - {e}"
 
     def review_task(self, codestral_output, timeout=300):
-        logger.debug(f"Reviewing codestral output: {codestral_output}")
+        logger.debug(f"Reviewing codestral output: {codestral_output}", extra={'correlation_id': self.correlation_id})
         review_prompt = (
             f"Review this: {codestral_output}. Return ONLY the COMPLETE fixed function in Python "
             "using a FULL try/except block for ZeroDivisionError or KeyError ONLY, returning None in except, "
@@ -254,24 +255,24 @@ if __name__ == "__main__":
         return self.send_task("reviewer", review_prompt, timeout)
 
     def preprocess_ai_response(self, ai_response):
-        logger.debug(f"Preprocessing AI response: {ai_response}")
+        logger.debug(f"Preprocessing AI response: {ai_response}", extra={'correlation_id': self.correlation_id})
         if self.retry_count >= self.max_retries:
-            logger.warning(f"Max retries reached. Using fallback.")
+            logger.warning(f"Max retries reached. Using fallback.", extra={'correlation_id': self.correlation_id})
             return "def placeholder():\n    pass"
         
         if not ai_response or ai_response.startswith("❌"):
-            logger.warning(f"Preprocessing failed: Empty or error:\n{ai_response}")
+            logger.warning(f"Preprocessing failed: Empty or error:\n{ai_response}", extra={'correlation_id': self.correlation_id})
             self.retry_count += 1
             return None
         
         if "<think>" in ai_response or any(prose in ai_response.lower() for prose in ["here's", "here is", "corrected", "fixed", "modified"]):
-            logger.warning(f"Prohibited content detected in:\n{ai_response}")
+            logger.warning(f"Prohibited content detected in:\n{ai_response}", extra={'correlation_id': self.correlation_id})
             self.retry_count += 1
             return None
 
         code_block = re.search(r"```(?:python)?\s*([\s\S]*?)\s*```", ai_response, re.DOTALL)
         if not code_block:
-            logger.warning(f"No code block found in:\n{ai_response}")
+            logger.warning(f"No code block found in:\n{ai_response}", extra={'correlation_id': self.correlation_id})
             self.retry_count += 1
             return None
         code = code_block.group(1).strip()
@@ -301,41 +302,42 @@ if __name__ == "__main__":
                                 if isinstance(stmt, (ast.Return, ast.Raise, ast.Expr)):
                                     continue
                         elif isinstance(body_node, ast.Raise):
-                            logger.warning(f"Standalone raise statement found outside try/except in:\n{code}")
+                            logger.warning(f"Standalone raise statement found outside try/except in:\n{code}", extra={'correlation_id': self.correlation_id})
                             self.retry_count += 1
                             return None
                     if any(isinstance(n, ast.Expr) and isinstance(n.value, ast.Str) for n in node.body if not isinstance(n, ast.Try)):
-                        logger.warning(f"Prose detected in function body:\n{code}")
+                        logger.warning(f"Prose detected in function body:\n{code}", extra={'correlation_id': self.correlation_id})
                         self.retry_count += 1
                         return None
                     if has_function and has_valid_try and has_valid_except and has_return_none:
                         self.retry_count = 0
-                        logger.debug(f"Preprocessing successful, returning code: {code}")
+                        logger.debug(f"Preprocessing successful, returning code: {code}", extra={'correlation_id': self.correlation_id})
                         return code
             if not has_function:
-                logger.warning(f"No function definition found in:\n{code}")
+                logger.warning(f"No function definition found in:\n{code}", extra={'correlation_id': self.correlation_id})
                 self.retry_count += 1
                 return None
-            logger.warning(f"Missing try/except, invalid exceptions, or missing returns in:\n{code}")
+            logger.warning(f"Missing try/except, invalid exceptions, or missing returns in:\n{code}", extra={'correlation_id': self.correlation_id})
             self.retry_count += 1
             return None
         except SyntaxError as e:
-            logger.warning(f"Invalid Python syntax in:\n{code}, error: {e}")
+            logger.warning(f"Invalid Python syntax in:\n{code}, error: {e}", extra={'correlation_id': self.correlation_id})
             self.retry_count += 1
             return None
 
-    def delegate_task(self, agent, task_description, save_to=None, timeout=300):
-        logger.debug(f"Sending task to {agent}: {task_description} (Timeout: {timeout}s)")
+    def delegate_task(self, agent, task_description, save_to=None, timeout=300, correlation_id=None):
+        self.correlation_id = correlation_id or self.correlation_id
+        logger.debug(f"Sending task to {agent}: {task_description} (Timeout: {timeout}s)", extra={'correlation_id': self.correlation_id})
         print(f"🔹 Sending task to {agent}: {task_description} (Timeout: {timeout}s)")
         result = self.send_task(agent, task_description, timeout)
         
         if not isinstance(result, str) or result.strip() == "" or result.startswith("❌"):
-            logger.warning(f"Invalid response for {agent}. Retrying...")
+            logger.warning(f"Invalid response for {agent}. Retrying...", extra={'correlation_id': self.correlation_id})
             print(f"❌ Invalid response for {agent}. Retrying...")
             result = self.send_task(agent, task_description, timeout + 60)
         
         if not isinstance(result, str) or result.strip() == "" or result.startswith("❌"):
-            logger.warning(f"Still invalid. Last try with strict mode...")
+            logger.warning(f"Still invalid. Last try with strict mode...", extra={'correlation_id': self.correlation_id})
             print(f"❌ Still invalid. Last try with strict mode...")
             result = self.send_task(
                 agent,
@@ -344,32 +346,32 @@ if __name__ == "__main__":
             )
         
         if not isinstance(result, str) or result.strip() == "" or result.startswith("❌") or result == "ERROR: No response.":
-            logger.error("Using fallback after max retries.")
+            logger.error("Using fallback after max retries.", extra={'correlation_id': self.correlation_id})
             print("❌ Using fallback after max retries.")
             self.retry_count = 0
             return "def placeholder():\n    pass"
         
         if any(prose in result.lower() for prose in ["here's", "here is", "corrected", "fixed", "modified", "<think>"]):
             reviewed_fix = self.review_task(result, timeout)
-            logger.debug(f"Reviewer response for task: {reviewed_fix}")
+            logger.debug(f"Reviewer response for task: {reviewed_fix}", extra={'correlation_id': self.correlation_id})
             print(f"Debug: Reviewer response for task: {reviewed_fix}")
             if reviewed_fix and isinstance(reviewed_fix, str) and reviewed_fix.strip() and reviewed_fix != "ERROR: No valid function found.":
                 final_fix = self.preprocess_ai_response(reviewed_fix)
             else:
-                logger.warning(f"Review failed—using original.")
+                logger.warning(f"Review failed—using original.", extra={'correlation_id': self.correlation_id})
                 print(f"❌ Review failed—using original.")
                 final_fix = self.preprocess_ai_response(result)
         else:
             final_fix = self.preprocess_ai_response(result)
         
         if final_fix is None:
-            logger.error("Preprocessing failed. Using fallback.")
+            logger.error("Preprocessing failed. Using fallback.", extra={'correlation_id': self.correlation_id})
             print("❌ Preprocessing failed. Using fallback.")
             self.retry_count = 0
             return "def placeholder():\n    pass"
         
         self.retry_count = 0
-        logger.debug(f"Task completed successfully, final fix: {final_fix}")
+        logger.debug(f"Task completed successfully, final fix: {final_fix}", extra={'correlation_id': self.correlation_id})
         return final_fix
 
 if __name__ == "__main__":
