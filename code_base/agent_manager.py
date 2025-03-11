@@ -70,9 +70,9 @@ class AgentManager:
             handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - correlation_id:%(correlation_id)s - %(message)s'))
         logger.debug("Logging reconfigured with correlation_id", extra={'correlation_id': self.correlation_id or 'N/A'})
 
-    def test_fix(self, script_path, original_error, stack_trace, fix):
+    def test_fix(self, script_path, original_error, stack_trace, fix, test_input_str=None):
         """Test if the fix handles the original error using AST for parsing and modification."""
-        logger.debug(f"Starting test_fix for script_path: {script_path}, original_error: {original_error}, stack_trace: {stack_trace}", extra={'correlation_id': self.correlation_id or 'N/A'})
+        logger.debug(f"Starting test_fix for script_path: {script_path}, original_error: {original_error}, stack_trace: {stack_trace}, test_input_str: {test_input_str}", extra={'correlation_id': self.correlation_id or 'N/A'})
         try:
             with open(script_path, "r") as f:
                 script_content = f.read()
@@ -121,17 +121,26 @@ class AgentManager:
             # Extract argument names for dynamic test case generation
             arg_names = [arg.arg for arg in target_func.args.args]
 
-            # Get the error handler for the original error
-            handler = get_error_handler(original_error)
-
-            # Generate test case dynamically
-            self.test_input, self.expected_result = handler.generate_test_case(arg_names)  # Store as instance attributes
-            if self.test_input is None:
+            # Use test_input from the log entry if provided, otherwise generate
+            if test_input_str:
+                try:
+                    import ast
+                    test_input = ast.literal_eval(test_input_str)
+                    logger.debug(f"Using provided test_input: {test_input}", extra={'correlation_id': self.correlation_id or 'N/A'})
+                except (ValueError, SyntaxError):
+                    logger.warning(f"Invalid test_input_str: {test_input_str}, falling back to generator", extra={'correlation_id': self.correlation_id or 'N/A'})
+                    handler = get_error_handler(original_error)
+                    test_input, self.expected_result = handler.generate_test_case(arg_names)
+            else:
+                handler = get_error_handler(original_error)
+                test_input, self.expected_result = handler.generate_test_case(arg_names)
+            if test_input is None:
                 logger.error(f"No test case defined for {original_error}", extra={'correlation_id': self.correlation_id or 'N/A'})
                 return False, f"No test case for {original_error}"
 
-            # Generate the test call for the specific function
-            test_call = f"{func_name}({', '.join(map(str, self.test_input))})"
+            # Generate the test call with the correct arguments
+            test_call = f"{func_name}({', '.join(map(str, test_input) if isinstance(test_input, (tuple, list)) else [str(test_input)])})"
+            logger.debug(f"Generated test call: {test_call}", extra={'correlation_id': self.correlation_id or 'N/A'})
 
             # Create a new module AST for the test script
             test_module = ast.Module(body=[
