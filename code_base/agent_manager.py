@@ -90,16 +90,19 @@ class AgentManager:
             error_line = int(line_match.group(1))
             logger.debug(f"Error line from stack_trace: {error_line}", extra={'correlation_id': self.correlation_id or 'N/A'})
 
-            # Find the function containing the error line
+            # Find the function containing the exact error line
             target_func = None
             for node in ast.walk(tree):
                 if isinstance(node, ast.FunctionDef):
-                    if node.lineno <= error_line <= node.end_lineno:
-                        target_func = node
+                    for child in ast.walk(node):
+                        if hasattr(child, 'lineno') and child.lineno == error_line:
+                            target_func = node
+                            break
+                    if target_func:
                         break
             if not target_func:
-                logger.error("No function found containing the error line", extra={'correlation_id': self.correlation_id or 'N/A'})
-                return False, "No function found at error line"
+                logger.error("No function found containing the exact error line", extra={'correlation_id': self.correlation_id or 'N/A'})
+                return False, "No function found at exact error line"
 
             func_name = target_func.name
             logger.debug(f"Found target function: {func_name} at lines {target_func.lineno}-{target_func.end_lineno}", extra={'correlation_id': self.correlation_id or 'N/A'})
@@ -139,7 +142,11 @@ class AgentManager:
                 logger.error(f"No test case defined for {original_error}", extra={'correlation_id': self.correlation_id or 'N/A'})
                 return False, f"No test case for {original_error}"
 
-            # Generate the test call with the correct arguments
+            # Generate the test call with the correct number of arguments
+            if len(arg_names) != len(test_input) if isinstance(test_input, (tuple, list)) else 1:
+                logger.warning(f"Test input {test_input} does not match argument count {len(arg_names)} for {func_name}", extra={'correlation_id': self.correlation_id or 'N/A'})
+                handler = get_error_handler(original_error)
+                test_input, self.expected_result = handler.generate_test_case(arg_names)
             test_call = f"{func_name}({', '.join(map(str, test_input) if isinstance(test_input, (tuple, list)) else [str(test_input)])})"
             logger.debug(f"Generated test call: {test_call}", extra={'correlation_id': self.correlation_id or 'N/A'})
 
