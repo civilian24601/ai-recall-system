@@ -55,6 +55,7 @@ class BuildAgent:
         self.max_attempts = 6
         self.project_dir = "/mnt/f/projects/ai-recall-system"
         self.backup_dir = f"{self.project_dir}/backups"
+        self.test_scripts_dir = f"{self.project_dir}/code_base/test_scripts"  # Runtime directory for test scripts
         self.debug_log_file = f"{self.project_dir}/logs/DEBUG_LOGS_TEST.JSON"
         self.embed_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
         self.collections = {
@@ -193,8 +194,11 @@ def authenticate_user(user_data):
                 with open(backup_path, "w") as f:
                     f.write(content.strip() + "\n")
         
+        # Create the runtime test scripts directory if it doesn't exist
+        os.makedirs(self.test_scripts_dir, exist_ok=True)
+
         for script_name, content in test_scripts.items():
-            script_path = os.path.join(self.project_dir, "code_base/test_scripts", script_name)
+            script_path = os.path.join(self.test_scripts_dir, script_name)
             with open(script_path, "w") as f:
                 f.write(content.strip() + "\n")
 
@@ -238,8 +242,8 @@ def authenticate_user(user_data):
                     logger.warning(f"Skipping log {error_id}—no script", extra={'correlation_id': self.correlation_id})
                     continue
 
-                # Use the same path as reset_state for consistency
-                script_path = os.path.join(self.project_dir, "code_base", "test_scripts", script_name)
+                # Read from the runtime test scripts directory
+                script_path = os.path.join(self.test_scripts_dir, script_name)
                 if not os.path.exists(script_path):
                     logger.warning(f"Script {script_name} not found—skipping", extra={'correlation_id': self.correlation_id})
                     continue
