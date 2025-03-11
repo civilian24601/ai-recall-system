@@ -94,20 +94,26 @@ class AgentManager:
             target_func = None
             for node in ast.walk(tree):
                 if isinstance(node, ast.FunctionDef):
-                    for child in ast.walk(node):
-                        if hasattr(child, 'lineno') and child.lineno == error_line and isinstance(child, (ast.Return, ast.Assign, ast.Expr)):
-                            target_func = node
-                            logger.debug(f"Matched target function {node.name} with exact line {error_line} in body", extra={'correlation_id': self.correlation_id or 'N/A'})
+                    for item in node.body:
+                        for child in ast.walk(item):
+                            if hasattr(child, 'lineno') and child.lineno == error_line and isinstance(child, (ast.Return, ast.Assign, ast.Expr)):
+                                target_func = node
+                                logger.debug(f"Matched target function {node.name} with exact line {error_line} in body", extra={'correlation_id': self.correlation_id or 'N/A'})
+                                break
+                        if target_func:
                             break
                     if target_func:
                         break
             if not target_func:
-                # Fallback to range-based matching if exact line match fails
+                # Fallback to range-based matching with detailed logging
                 for node in ast.walk(tree):
                     if isinstance(node, ast.FunctionDef):
                         if node.lineno <= error_line <= node.end_lineno:
                             target_func = node
-                            logger.warning(f"Fallback: Matched target function {node.name} by range {node.lineno}-{node.end_lineno}", extra={'correlation_id': self.correlation_id or 'N/A'})
+                            logger.warning(f"Fallback: Matched target function {node.name} by range {node.lineno}-{node.end_lineno} for line {error_line}", extra={'correlation_id': self.correlation_id or 'N/A'})
+                            # Log all body line numbers for debugging
+                            body_lines = [child.lineno for child in ast.walk(node) if hasattr(child, 'lineno')]
+                            logger.debug(f"Function {node.name} body lines: {body_lines}", extra={'correlation_id': self.correlation_id or 'N/A'})
                             break
             if not target_func:
                 logger.error("No function found containing the error line", extra={'correlation_id': self.correlation_id or 'N/A'})
