@@ -10,6 +10,7 @@ Supports scalability for diverse error types and code structures.
 
 import ast
 import logging
+import os
 
 # Configure logging for test_case_generator.py
 try:
