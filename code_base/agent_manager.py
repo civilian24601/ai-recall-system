@@ -90,19 +90,28 @@ class AgentManager:
             error_line = int(line_match.group(1))
             logger.debug(f"Error line from stack_trace: {error_line}", extra={'correlation_id': self.correlation_id or 'N/A'})
 
-            # Find the function containing the exact error line
+            # Find the function containing the exact error line within its body
             target_func = None
             for node in ast.walk(tree):
                 if isinstance(node, ast.FunctionDef):
                     for child in ast.walk(node):
-                        if hasattr(child, 'lineno') and child.lineno == error_line:
+                        if hasattr(child, 'lineno') and child.lineno == error_line and isinstance(child, (ast.Return, ast.Assign, ast.Expr)):
                             target_func = node
+                            logger.debug(f"Matched target function {node.name} with exact line {error_line} in body", extra={'correlation_id': self.correlation_id or 'N/A'})
                             break
                     if target_func:
                         break
             if not target_func:
-                logger.error("No function found containing the exact error line", extra={'correlation_id': self.correlation_id or 'N/A'})
-                return False, "No function found at exact error line"
+                # Fallback to range-based matching if exact line match fails
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.FunctionDef):
+                        if node.lineno <= error_line <= node.end_lineno:
+                            target_func = node
+                            logger.warning(f"Fallback: Matched target function {node.name} by range {node.lineno}-{node.end_lineno}", extra={'correlation_id': self.correlation_id or 'N/A'})
+                            break
+            if not target_func:
+                logger.error("No function found containing the error line", extra={'correlation_id': self.correlation_id or 'N/A'})
+                return False, "No function found at error line"
 
             func_name = target_func.name
             logger.debug(f"Found target function: {func_name} at lines {target_func.lineno}-{target_func.end_lineno}", extra={'correlation_id': self.correlation_id or 'N/A'})
@@ -142,11 +151,12 @@ class AgentManager:
                 logger.error(f"No test case defined for {original_error}", extra={'correlation_id': self.correlation_id or 'N/A'})
                 return False, f"No test case for {original_error}"
 
-            # Generate the test call with the correct number of arguments
-            if len(arg_names) != len(test_input) if isinstance(test_input, (tuple, list)) else 1:
-                logger.warning(f"Test input {test_input} does not match argument count {len(arg_names)} for {func_name}", extra={'correlation_id': self.correlation_id or 'N/A'})
-                handler = get_error_handler(original_error)
-                test_input, self.expected_result = handler.generate_test_case(arg_names)
+            # Adjust test_input to match the number of arguments
+            if isinstance(test_input, (tuple, list)):
+                if len(arg_names) != len(test_input):
+                    logger.warning(f"Adjusting test_input {test_input} to match {len(arg_names)} arguments for {func_name}", extra={'correlation_id': self.correlation_id or 'N/A'})
+                    handler = get_error_handler(original_error)
+                    test_input, self.expected_result = handler.generate_test_case(arg_names)
             test_call = f"{func_name}({', '.join(map(str, test_input) if isinstance(test_input, (tuple, list)) else [str(test_input)])})"
             logger.debug(f"Generated test call: {test_call}", extra={'correlation_id': self.correlation_id or 'N/A'})
 
