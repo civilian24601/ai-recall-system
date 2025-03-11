@@ -314,6 +314,7 @@ def authenticate_user(user_data):
                     
                     resolved = fix_works
                     
+                    # Enhanced logging with test input and expected result
                     log_entry = {
                         "id": error_id,
                         "error": error,
@@ -325,7 +326,9 @@ def authenticate_user(user_data):
                         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
                         "execution_trace_id": execution_trace_id,
                         "test_result": "Success" if fix_works else f"Failed: {fix_error}",
-                        "attempts": attempt_count
+                        "attempts": attempt_count,
+                        "test_input": str(validation_result.get("test_input", "N/A")),  # From blueprint_executor
+                        "expected_result": str(validation_result.get("expected_result", "N/A"))  # From blueprint_executor
                     }
                     self.log_entry("debugging_logs", error_id, log_entry)
                     

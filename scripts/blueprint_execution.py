@@ -157,7 +157,12 @@ class BlueprintExecution:
             
             self.evolve_blueprint(blueprint_id, execution_trace_id, success)
             logging.debug(f"Completed run_blueprint for {blueprint_id}, returning execution_trace_id: {execution_trace_id}")
-            return execution_trace_id, {"fix_works": fix_works, "fix_error": fix_error if not fix_works else ""}
+            return execution_trace_id, {
+                "fix_works": fix_works,
+                "fix_error": fix_error if not fix_works else "",
+                "test_input": getattr(self.agent_manager, 'test_input', 'N/A'),  # Pass test input from agent_manager
+                "expected_result": getattr(self.agent_manager, 'expected_result', 'N/A')  # Pass expected result from agent_manager
+            }
         except Exception as e:
             print(f"⚠️ Blueprint execution failed: {e}")
             logging.error(f"Exception in run_blueprint: {e}, traceback: {traceback.format_exc()}")
