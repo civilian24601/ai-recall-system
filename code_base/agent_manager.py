@@ -26,8 +26,22 @@ sys.path.append("/mnt/f/projects/ai-recall-system")
 from code_base.network_utils import detect_api_url
 from code_base.test_case_generator import get_error_handler
 
-# Configure logging (moved inside __init__ to handle correlation_id)
+# Configure basic logging without correlation_id until it's set
 logger = logging.getLogger('agent_manager')
+logger.setLevel(logging.DEBUG)
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+logger.addHandler(console_handler)
+try:
+    log_dir = "/mnt/f/projects/ai-recall-system/logs"
+    os.makedirs(log_dir, exist_ok=True)
+    file_handler = logging.FileHandler(f"{log_dir}/agent_manager_debug.log", mode='a')
+    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    logger.addHandler(file_handler)
+    logger.debug("Logging initialized successfully for agent_manager.py")
+except Exception as e:
+    print(f"⚠️ Failed to initialize file logging for agent_manager.py: {e}")
+    logger.warning("Falling back to console-only logging due to file handler error")
 
 class AgentManager:
     """Manages AI Agents for architecture, coding, review, and automation with simplified prompts and lighter models."""
@@ -51,21 +65,10 @@ class AgentManager:
         self.expected_result = None
         self.correlation_id = None  # Will be set by BuildAgent
 
-        # Configure logging here to ensure correlation_id is available
-        logger.setLevel(logging.DEBUG)
-        console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - correlation_id:%(correlation_id)s - %(message)s'))
-        logger.addHandler(console_handler)
-        try:
-            log_dir = "/mnt/f/projects/ai-recall-system/logs"
-            os.makedirs(log_dir, exist_ok=True)
-            file_handler = logging.FileHandler(f"{log_dir}/agent_manager_debug.log", mode='a')
-            file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - correlation_id:%(correlation_id)s - %(message)s'))
-            logger.addHandler(file_handler)
-            logger.debug("Logging initialized successfully for agent_manager.py", extra={'correlation_id': self.correlation_id or 'N/A'})
-        except Exception as e:
-            print(f"⚠️ Failed to initialize file logging for agent_manager.py: {e}")
-            logger.warning("Falling back to console-only logging due to file handler error", extra={'correlation_id': self.correlation_id or 'N/A'})
+        # Reconfigure logging with correlation_id now that it's available
+        for handler in logger.handlers:
+            handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - correlation_id:%(correlation_id)s - %(message)s'))
+        logger.debug("Logging reconfigured with correlation_id", extra={'correlation_id': self.correlation_id or 'N/A'})
 
     def test_fix(self, script_path, original_error, stack_trace, fix):
         """Test if the fix handles the original error using AST for parsing and modification."""

@@ -12,22 +12,26 @@ import os
 import sys
 import logging
 
-# Configure logging
+# Configure basic logging without correlation_id until it's set
 logger = logging.getLogger('test_case_generator')
 logger.setLevel(logging.DEBUG)
 console_handler = logging.StreamHandler(sys.stdout)
-console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - correlation_id:%(correlation_id)s - %(message)s'))
+console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
 logger.addHandler(console_handler)
 try:
     log_dir = "/mnt/f/projects/ai-recall-system/logs"
     os.makedirs(log_dir, exist_ok=True)
     file_handler = logging.FileHandler(f"{log_dir}/test_case_generator_debug.log", mode='a')
-    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - correlation_id:%(correlation_id)s - %(message)s'))
+    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
     logger.addHandler(file_handler)
     logger.debug("Logging initialized successfully for test_case_generator.py")
 except Exception as e:
     print(f"⚠️ Failed to initialize logging for test_case_generator.py: {e}")
     logger.warning("Falling back to console-only logging due to file handler error")
+
+# Reconfigure logging with correlation_id support (though not set yet)
+for handler in logger.handlers:
+    handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - correlation_id:%(correlation_id)s - %(message)s'))
 
 class ErrorHandler:
     """Handles error-specific test case generation and validation for Python code fixes."""

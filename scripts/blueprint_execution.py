@@ -25,8 +25,22 @@ sys.path.append(PARENT_DIR)
 
 from code_base.agent_manager import AgentManager
 
-# Configure logging (moved inside __init__ to handle correlation_id)
+# Configure basic logging without correlation_id until it's set
 logger = logging.getLogger('blueprint_execution')
+logger.setLevel(logging.DEBUG)
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+logger.addHandler(console_handler)
+try:
+    log_dir = "/mnt/f/projects/ai-recall-system/logs"
+    os.makedirs(log_dir, exist_ok=True)
+    file_handler = logging.FileHandler(f"{log_dir}/blueprint_debug.log", mode='a')
+    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    logger.addHandler(file_handler)
+    logger.debug("Logging initialized successfully for blueprint_execution.py")
+except Exception as e:
+    print(f"⚠️ Failed to initialize file logging for blueprint_execution.py: {e}")
+    logger.warning("Falling back to console-only logging due to file handler error")
 
 class BlueprintExecution:
     def __init__(self, agent_manager=None, test_mode=False, collections=None):
@@ -43,21 +57,10 @@ class BlueprintExecution:
         self.DEFAULT_RATIO_WINDOW = 3
         self.DEFAULT_RATIO_FAIL_COUNT = 2
 
-        # Configure logging here to ensure correlation_id is available
-        logger.setLevel(logging.DEBUG)
-        console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - correlation_id:%(correlation_id)s - %(message)s'))
-        logger.addHandler(console_handler)
-        try:
-            log_dir = "/mnt/f/projects/ai-recall-system/logs"
-            os.makedirs(log_dir, exist_ok=True)
-            file_handler = logging.FileHandler(f"{log_dir}/blueprint_debug.log", mode='a')
-            file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - correlation_id:%(correlation_id)s - %(message)s'))
-            logger.addHandler(file_handler)
-            logger.debug("Logging initialized successfully for blueprint_execution.py", extra={'correlation_id': 'N/A'})
-        except Exception as e:
-            print(f"⚠️ Failed to initialize file logging for blueprint_execution.py: {e}")
-            logger.warning("Falling back to console-only logging due to file handler error", extra={'correlation_id': 'N/A'})
+        # Reconfigure logging with correlation_id if available
+        for handler in logger.handlers:
+            handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - correlation_id:%(correlation_id)s - %(message)s'))
+        logger.debug("Logging reconfigured with correlation_id", extra={'correlation_id': 'N/A'})
 
         print(
             f"⚙️ [BlueprintExecution __init__] Default thresholds:\n"
