@@ -15,7 +15,7 @@ import json
 import logging
 import requests
 import subprocess
-import ast  # Added missing import
+import ast
 import re
 import time
 import traceback
@@ -121,11 +121,13 @@ class AgentManager:
             # Extract argument names for dynamic test case generation
             arg_names = [arg.arg for arg in target_func.args.args]
 
-            # Use test_input from the log entry if provided, otherwise generate
-            if test_input_str:
+            # Use test_input from the log entry if provided and valid, otherwise generate
+            if test_input_str and test_input_str != "None":
                 try:
                     test_input = ast.literal_eval(test_input_str)
                     logger.debug(f"Using provided test_input: {test_input}", extra={'correlation_id': self.correlation_id or 'N/A'})
+                    handler = get_error_handler(original_error)
+                    _, self.expected_result = handler.generate_test_case(arg_names)  # Ensure expected_result is set
                 except (ValueError, SyntaxError):
                     logger.warning(f"Invalid test_input_str: {test_input_str}, falling back to generator", extra={'correlation_id': self.correlation_id or 'N/A'})
                     handler = get_error_handler(original_error)

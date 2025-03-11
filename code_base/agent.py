@@ -170,7 +170,9 @@ class BuildAgent:
                     "id": test_id,
                     "error": test_data["error"],
                     "stack_trace": test_data["stack_trace"],
-                    "resolved": False
+                    "resolved": False,
+                    "test_input": test_data.get("test_input", None),  # Store test_input from expected_results
+                    "expected_result": test_data.get("expected_result", None)
                 })
         else:
             logger.error("Test config not found, unable to proceed with reset", extra={'correlation_id': self.correlation_id})
@@ -320,7 +322,7 @@ class BuildAgent:
                         else:
                             f.write(final_fix + "\n" + original_content)
 
-                    # Pass the test_input from the log entry
+                    # Pass the test_input from the log entry and update validation_result
                     test_input = log.get("test_input", None)
                     fix_works, fix_error = self.agent_manager.test_fix(temp_script_path, error, stack_trace, final_fix, test_input_str=test_input)
                     logger.debug(f"Validation result for {error_id}: fix_works={fix_works}, fix_error={fix_error}", extra={'correlation_id': self.correlation_id})
@@ -338,6 +340,11 @@ class BuildAgent:
                     stack_trace=stack_trace,
                     correlation_id=self.correlation_id
                 )
+                
+                # Update validation_result with test_input and expected_result from the log
+                if "test_input" in log and "expected_result" in log:
+                    validation_result["test_input"] = log["test_input"]
+                    validation_result["expected_result"] = log["expected_result"]
                 
                 if execution_trace_id:
                     fix_works = validation_result.get("fix_works", False)
