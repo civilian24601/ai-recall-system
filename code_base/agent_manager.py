@@ -104,7 +104,7 @@ class AgentManager:
             func_name = target_func.name
             logger.debug(f"Found target function: {func_name} at lines {target_func.lineno}-{target_func.end_lineno}", extra={'correlation_id': self.correlation_id or 'N/A'})
 
-            # Parse the AI-generated fix and apply it to the target function
+            # Parse the AI-generated fix
             fix_tree = ast.parse(fix)
             if not fix_tree.body or not isinstance(fix_tree.body[0], ast.FunctionDef):
                 logger.error("Fix does not contain a valid function definition", extra={'correlation_id': self.correlation_id or 'N/A'})
@@ -113,7 +113,9 @@ class AgentManager:
             if fix_func.name != func_name:
                 logger.error(f"Fix function name {fix_func.name} does not match target function {func_name}", extra={'correlation_id': self.correlation_id or 'N/A'})
                 return False, "Fix function name mismatch"
-            target_func.body = fix_func.body  # Replace the body of the target function with the fixed body
+
+            # Replace the target function's body with the fixed body
+            target_func.body = fix_func.body
             logger.debug(f"Applied fix to function {func_name}", extra={'correlation_id': self.correlation_id or 'N/A'})
 
             # Extract argument names for dynamic test case generation
@@ -128,14 +130,14 @@ class AgentManager:
                 logger.error(f"No test case defined for {original_error}", extra={'correlation_id': self.correlation_id or 'N/A'})
                 return False, f"No test case for {original_error}"
 
-            # Generate the test call
+            # Generate the test call for the specific function
             test_call = f"{func_name}({', '.join(map(str, self.test_input))})"
 
             # Create a new module AST for the test script
             test_module = ast.Module(body=[
                 ast.Import(names=[ast.alias(name='sys', asname=None)]),
                 ast.ImportFrom(module='io', names=[ast.alias(name='StringIO', asname=None)], level=0),
-                target_func,
+            ] + list(tree.body) + [  # Include all functions from the original script
                 ast.parse(f"""
 def run_test():
     original_stdout = sys.stdout

@@ -55,6 +55,7 @@ class BuildAgent:
         self.max_attempts = 6
         self.project_dir = "/mnt/f/projects/ai-recall-system"
         self.backup_dir = f"{self.project_dir}/backups"
+        self.test_source_dir = f"{self.project_dir}/tests/test_cases"  # Source directory for test scripts
         self.test_scripts_dir = f"{self.project_dir}/code_base/test_scripts"  # Runtime directory for test scripts
         self.debug_log_file = f"{self.project_dir}/logs/DEBUG_LOGS_TEST.JSON"
         self.embed_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
@@ -157,7 +158,7 @@ class BuildAgent:
                     logger.warning(f"Test ID {test_id} not found in expected_results.json", extra={'correlation_id': self.correlation_id})
                     continue
                 test_data = expected_results[test_id]
-                script_path = os.path.join(self.project_dir, "tests", "test_cases", test_data["script"].split("/")[-1])
+                script_path = os.path.join(self.test_source_dir, test_data["script"].split("/")[-1])
                 if not os.path.exists(script_path):
                     logger.warning(f"Test script {script_path} not found for test ID {test_id}", extra={'correlation_id': self.correlation_id})
                     continue
@@ -172,31 +173,19 @@ class BuildAgent:
                     "resolved": False
                 })
         else:
-            logger.warning("Test config not found, falling back to default test scripts", extra={'correlation_id': self.correlation_id})
-            test_scripts = {
-                "test_script.py": """
-def divide(a, b):
-    return a / b  # Fails on b=0
-""",
-                "user_auth.py": """
-def authenticate_user(user_data):
-    return user_data["username"]  # Fails if 'username' missing
-"""
-            }
-            debug_logs = [
-                {"id": "test1", "error": "ZeroDivisionError", "stack_trace": "File 'test_script.py', line 3", "resolved": False},
-                {"id": "test2", "error": "KeyError", "stack_trace": "File 'user_auth.py', line 5", "resolved": False}
-            ]
+            logger.error("Test config not found, unable to proceed with reset", extra={'correlation_id': self.correlation_id})
+            return  # No fallback to hardcoded tests
 
         for script_name, content in test_scripts.items():
             backup_path = os.path.join(self.backup_dir, script_name)
             if not os.path.exists(backup_path):
                 with open(backup_path, "w") as f:
                     f.write(content.strip() + "\n")
-        
+
         # Create the runtime test scripts directory if it doesn't exist
         os.makedirs(self.test_scripts_dir, exist_ok=True)
 
+        # Copy scripts from tests/test_cases to code_base/test_scripts
         for script_name, content in test_scripts.items():
             script_path = os.path.join(self.test_scripts_dir, script_name)
             with open(script_path, "w") as f:
