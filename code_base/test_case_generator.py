@@ -67,19 +67,19 @@ ERROR_HANDLERS = {
     "ZeroDivisionError": ErrorHandler(
         error_type="ZeroDivisionError",
         fix_strategy=lambda node: "try/except ZeroDivisionError",
-        test_case_generator=lambda args: [(10, 0) if len(args) == 2 else None, None],
+        test_case_generator=lambda args: [(10, 0) if len(args) == 2 else (None, None), None],
         validator=lambda result: result is None  # Expect None on ZeroDivisionError
     ),
     "KeyError": ErrorHandler(
         error_type="KeyError",
         fix_strategy=lambda node: "try/except KeyError",
-        test_case_generator=lambda args: [{"password": "secure123"}] if len(args) == 1 else None,  # Missing "username"
+        test_case_generator=lambda args: ([{"password": "secure123"}] if len(args) == 1 else [None], None),
         validator=lambda result: result is None  # Expect None when "username" is missing
     ),
     "TypeError": ErrorHandler(
         error_type="TypeError",
         fix_strategy=lambda node: "try/except TypeError",
-        test_case_generator=lambda args: [(None, 0) if len(args) == 2 else None, None],  # Invalid type
+        test_case_generator=lambda args: [(None, 0) if len(args) == 2 else (None, None), None],  # Invalid type
         validator=lambda result: result is None  # Expect None on TypeError
     )
 }
