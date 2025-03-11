@@ -54,10 +54,10 @@ class BlueprintExecution:
             file_handler = logging.FileHandler(f"{log_dir}/blueprint_debug.log", mode='a')
             file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - correlation_id:%(correlation_id)s - %(message)s'))
             logger.addHandler(file_handler)
-            logger.debug("Logging initialized successfully for blueprint_execution.py", extra={'correlation_id': self.correlation_id or 'N/A'})
+            logger.debug("Logging initialized successfully for blueprint_execution.py", extra={'correlation_id': 'N/A'})
         except Exception as e:
             print(f"⚠️ Failed to initialize file logging for blueprint_execution.py: {e}")
-            logger.warning("Falling back to console-only logging due to file handler error", extra={'correlation_id': self.correlation_id or 'N/A'})
+            logger.warning("Falling back to console-only logging due to file handler error", extra={'correlation_id': 'N/A'})
 
         print(
             f"⚙️ [BlueprintExecution __init__] Default thresholds:\n"

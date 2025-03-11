@@ -8,33 +8,26 @@ Generates dynamic test cases and validation strategies for error handling in Pyt
 Supports scalability for diverse error types and code structures.
 """
 
-import ast
-import logging
 import os
+import sys
+import logging
 
-# Configure logging for test_case_generator.py
+# Configure logging
+logger = logging.getLogger('test_case_generator')
+logger.setLevel(logging.DEBUG)
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - correlation_id:%(correlation_id)s - %(message)s'))
+logger.addHandler(console_handler)
 try:
     log_dir = "/mnt/f/projects/ai-recall-system/logs"
     os.makedirs(log_dir, exist_ok=True)
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.StreamHandler(),
-            logging.FileHandler(f"{log_dir}/test_case_generator.log", mode='a')
-        ]
-    )
-    logging.debug("Logging initialized successfully for test_case_generator.py")
-    with open(f"{log_dir}/test_case_generator.log", "a") as f:
-        f.write("Test write to verify file handler\n")
+    file_handler = logging.FileHandler(f"{log_dir}/test_case_generator_debug.log", mode='a')
+    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - correlation_id:%(correlation_id)s - %(message)s'))
+    logger.addHandler(file_handler)
+    logger.debug("Logging initialized successfully for test_case_generator.py")
 except Exception as e:
     print(f"⚠️ Failed to initialize logging for test_case_generator.py: {e}")
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        handlers=[logging.StreamHandler()]
-    )
-    logging.warning("Falling back to console-only logging due to file handler error")
+    logger.warning("Falling back to console-only logging due to file handler error")
 
 class ErrorHandler:
     """Handles error-specific test case generation and validation for Python code fixes."""
@@ -55,12 +48,12 @@ class ErrorHandler:
 
     def generate_test_case(self, arg_names):
         """Generate a test case for the given function arguments."""
-        logging.debug(f"Generating test case for error {self.error_type} with args: {arg_names}")
+        logger.debug(f"Generating test case for error {self.error_type} with args: {arg_names}", extra={'correlation_id': 'N/A'})
         return self.test_case_generator(arg_names)
 
     def validate_result(self, result):
         """Validate the test result using the defined validator."""
-        logging.debug(f"Validating result for {self.error_type}: {result}")
+        logger.debug(f"Validating result for {self.error_type}: {result}", extra={'correlation_id': 'N/A'})
         return self.validator(result)
 
 # Registry of error handlers
@@ -69,19 +62,25 @@ ERROR_HANDLERS = {
         error_type="ZeroDivisionError",
         fix_strategy=lambda node: "try/except ZeroDivisionError",
         test_case_generator=lambda args: [(10, 0) if len(args) == 2 else (None, None), None],
-        validator=lambda result: result is None  # Expect None on ZeroDivisionError
+        validator=lambda result: result is None
     ),
     "KeyError": ErrorHandler(
         error_type="KeyError",
         fix_strategy=lambda node: "try/except KeyError",
         test_case_generator=lambda args: ([{"password": "secure123"}] if len(args) == 1 else [None], None),
-        validator=lambda result: result is None  # Expect None when "username" is missing
+        validator=lambda result: result is None
     ),
     "TypeError": ErrorHandler(
         error_type="TypeError",
         fix_strategy=lambda node: "try/except TypeError",
-        test_case_generator=lambda args: [(None, 0) if len(args) == 2 else (None, None), None],  # Invalid type
-        validator=lambda result: result is None  # Expect None on TypeError
+        test_case_generator=lambda args: [(10, "invalid") if len(args) == 2 else (None, None), None],
+        validator=lambda result: result is None
+    ),
+    "ValueError": ErrorHandler(
+        error_type="ValueError",
+        fix_strategy=lambda node: "try/except ValueError",
+        test_case_generator=lambda args: [("invalid",) if len(args) == 1 else (None, None), None],
+        validator=lambda result: result is None
     )
 }
 
@@ -89,7 +88,7 @@ def get_error_handler(error_type):
     """Retrieve the ErrorHandler for the given error type."""
     handler = ERROR_HANDLERS.get(error_type)
     if not handler:
-        logging.error(f"No handler defined for error type: {error_type}")
+        logger.error(f"No handler defined for error type: {error_type}", extra={'correlation_id': 'N/A'})
         raise ValueError(f"Unsupported error type: {error_type}")
     return handler
 
