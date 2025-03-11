@@ -320,6 +320,11 @@ class BuildAgent:
                         else:
                             f.write(final_fix + "\n" + original_content)
 
+                    # Pass the test_input from the log entry
+                    test_input = log.get("test_input", None)
+                    fix_works, fix_error = self.agent_manager.test_fix(temp_script_path, error, stack_trace, final_fix, test_input_str=test_input)
+                    logger.debug(f"Validation result for {error_id}: fix_works={fix_works}, fix_error={fix_error}", extra={'correlation_id': self.correlation_id})
+
                 logger.debug(f"Calling run_blueprint for {error_id} with original_error: {error}, script_path: {script_path}", extra={'correlation_id': self.correlation_id})
 
                 blueprint_id = f"bp_fix_{error_id}"

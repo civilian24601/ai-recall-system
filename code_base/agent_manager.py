@@ -15,7 +15,7 @@ import json
 import logging
 import requests
 import subprocess
-import ast
+import ast  # Added missing import
 import re
 import time
 import traceback
@@ -124,7 +124,6 @@ class AgentManager:
             # Use test_input from the log entry if provided, otherwise generate
             if test_input_str:
                 try:
-                    import ast
                     test_input = ast.literal_eval(test_input_str)
                     logger.debug(f"Using provided test_input: {test_input}", extra={'correlation_id': self.correlation_id or 'N/A'})
                 except (ValueError, SyntaxError):
