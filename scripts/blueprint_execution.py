@@ -25,30 +25,26 @@ sys.path.append(PARENT_DIR)
 
 from code_base.agent_manager import AgentManager
 
-# Configure logging
+# Configure logging with a dedicated logger for blueprint_execution.py
+logger = logging.getLogger('blueprint_execution')
+logger.setLevel(logging.DEBUG)
+
+# Create console handler
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+logger.addHandler(console_handler)
+
+# Create file handler
 try:
     log_dir = "/mnt/f/projects/ai-recall-system/logs"
     os.makedirs(log_dir, exist_ok=True)
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-            logging.FileHandler(f"{log_dir}/blueprint_debug.log", mode='a')  # Changed to 'a' for append
-        ]
-    )
-    logging.debug("Logging initialized successfully for blueprint_execution.py")
-    # Verify file handler is working
-    with open(f"{log_dir}/blueprint_debug.log", "a") as f:
-        f.write("Test write to verify file handler\n")
+    file_handler = logging.FileHandler(f"{log_dir}/blueprint_debug.log", mode='a')
+    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    logger.addHandler(file_handler)
+    logger.debug("Logging initialized successfully for blueprint_execution.py")
 except Exception as e:
-    print(f"⚠️ Failed to initialize logging for blueprint_execution.py: {e}")
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        handlers=[logging.StreamHandler(sys.stdout)]
-    )
-    logging.warning("Falling back to console-only logging due to file handler error")
+    print(f"⚠️ Failed to initialize file logging for blueprint_execution.py: {e}")
+    logger.warning("Falling back to console-only logging due to file handler error")
 
 class BlueprintExecution:
     def __init__(self, agent_manager=None, test_mode=False, collections=None):
@@ -79,55 +75,55 @@ class BlueprintExecution:
         """Executes a blueprint task, logs BELog, evolves if improved."""
         print(f"⚙️ Running blueprint {blueprint_id}: {task_name}")
         
-        logging.debug(f"Entering run_blueprint with blueprint_id: {blueprint_id}, task_name: {task_name}, script_path: {script_path}, "
+        logger.debug(f"Entering run_blueprint with blueprint_id: {blueprint_id}, task_name: {task_name}, script_path: {script_path}, "
                      f"final_fix: {final_fix}, original_error: {original_error}, stack_trace: {stack_trace}")
 
         start_time = time.time()
         temp_script_path = script_path + ".tmp"
         try:
-            logging.debug(f"Starting blueprint execution for task '{task_name}' with script_path: {script_path}, original_error: {original_error}")
+            logger.debug(f"Starting blueprint execution for task '{task_name}' with script_path: {script_path}, original_error: {original_error}")
 
             if task_name == "Apply fix":
                 if not final_fix:
-                    logging.error("final_fix is required for 'Apply fix' task")
+                    logger.error("final_fix is required for 'Apply fix' task")
                     raise ValueError("final_fix is required for 'Apply fix' task")
                 
-                logging.debug(f"Copying script {script_path} to temp file {temp_script_path}")
+                logger.debug(f"Copying script {script_path} to temp file {temp_script_path}")
                 shutil.copy(script_path, temp_script_path)
                 with open(temp_script_path, "r") as f:
                     original_content = f.read()
-                logging.debug(f"Original content of {temp_script_path}: {original_content}")
+                logger.debug(f"Original content of {temp_script_path}: {original_content}")
                 with open(temp_script_path, "w") as f:
                     f.write(final_fix + "\n")
-                logging.debug(f"Updated content of {temp_script_path} with fix: {final_fix}")
+                logger.debug(f"Updated content of {temp_script_path} with fix: {final_fix}")
 
-                logging.debug(f"Validating fix for {script_path} with original_error: {original_error}")
+                logger.debug(f"Validating fix for {script_path} with original_error: {original_error}")
                 fix_works = False
                 fix_error = "No validation performed"
                 try:
                     fix_works, fix_error = self.agent_manager.test_fix(temp_script_path, original_error, stack_trace, final_fix)
-                    logging.debug(f"Validation result for {script_path}: fix_works={fix_works}, fix_error={fix_error}")
+                    logger.debug(f"Validation result for {script_path}: fix_works={fix_works}, fix_error={fix_error}")
                 except Exception as e:
-                    logging.error(f"Validation failed for {script_path}: {e}, traceback: {traceback.format_exc()}")
+                    logger.error(f"Validation failed for {script_path}: {e}, traceback: {traceback.format_exc()}")
                     fix_error = str(e)
                 finally:
-                    logging.debug(f"Final validation result: fix_works={fix_works}, fix_error={fix_error}")
+                    logger.debug(f"Final validation result: fix_works={fix_works}, fix_error={fix_error}")
                 
                 if fix_works:
-                    logging.debug(f"Validation passed, applying fix by moving {temp_script_path} to {script_path}")
+                    logger.debug(f"Validation passed, applying fix by moving {temp_script_path} to {script_path}")
                     shutil.move(temp_script_path, script_path)
-                    logging.info(f"Applied valid fix to {script_path}")
+                    logger.info(f"Applied valid fix to {script_path}")
                     task_result = final_fix
                     success = True
                 else:
                     if os.path.exists(temp_script_path):
                         os.remove(temp_script_path)
-                        logging.debug(f"Cleaned up temp file after validation failure: {temp_script_path}")
-                    logging.warning(f"Fix for {task_name} failed validation: {fix_error}—preserving original script.")
+                        logger.debug(f"Cleaned up temp file after validation failure: {temp_script_path}")
+                    logger.warning(f"Fix for {task_name} failed validation: {fix_error}—preserving original script.")
                     task_result = None
                     success = False
             else:
-                logging.debug(f"Task '{task_name}' is not 'Apply fix', delegating to engineer")
+                logger.debug(f"Task '{task_name}' is not 'Apply fix', delegating to engineer")
                 task_result = self.agent_manager.delegate_task(
                     "engineer",
                     f"Execute task '{task_name}' on script {script_path} with context: {execution_context}",
@@ -139,7 +135,7 @@ class BlueprintExecution:
             errors = "None" if task_result and "def placeholder" not in task_result else "Task execution failed" if not success else "None"
             efficiency_score = int(100 - (execution_time * 10)) if success else 20
             
-            logging.debug(f"Logging execution result: success={success}, errors={errors}, efficiency_score={efficiency_score}")
+            logger.debug(f"Logging execution result: success={success}, errors={errors}, efficiency_score={efficiency_score}")
             execution_trace_id = self.log_execution(
                 blueprint_id=blueprint_id,
                 task_name=task_name,
@@ -156,7 +152,7 @@ class BlueprintExecution:
             )
             
             self.evolve_blueprint(blueprint_id, execution_trace_id, success)
-            logging.debug(f"Completed run_blueprint for {blueprint_id}, returning execution_trace_id: {execution_trace_id}")
+            logger.debug(f"Completed run_blueprint for {blueprint_id}, returning execution_trace_id: {execution_trace_id}")
             return execution_trace_id, {
                 "fix_works": fix_works,
                 "fix_error": fix_error if not fix_works else "",
@@ -165,10 +161,10 @@ class BlueprintExecution:
             }
         except Exception as e:
             print(f"⚠️ Blueprint execution failed: {e}")
-            logging.error(f"Exception in run_blueprint: {e}, traceback: {traceback.format_exc()}")
+            logger.error(f"Exception in run_blueprint: {e}, traceback: {traceback.format_exc()}")
             if os.path.exists(temp_script_path):
                 os.remove(temp_script_path)
-                logging.debug(f"Cleaned up temp file after failure: {temp_script_path}")
+                logger.debug(f"Cleaned up temp file after failure: {temp_script_path}")
             execution_time = time.time() - start_time
             return self.log_execution(
                 blueprint_id=blueprint_id,

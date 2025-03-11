@@ -18,7 +18,7 @@ import chromadb
 import subprocess
 import re
 import shutil
-import traceback  # Added for exception handling
+import traceback
 from langchain_huggingface.embeddings import HuggingFaceEmbeddings
 from datetime import datetime
 
@@ -29,29 +29,26 @@ from scripts.aggregator_search import aggregator_search
 from scripts.index_codebase import reindex_single_file
 from scripts.blueprint_execution import BlueprintExecution
 
-# Configure logging with both console and file handlers
+# Configure logging with a dedicated logger for agent.py
+logger = logging.getLogger('agent')
+logger.setLevel(logging.DEBUG)
+
+# Create console handler
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+logger.addHandler(console_handler)
+
+# Create file handler
 try:
     log_dir = "/mnt/f/projects/ai-recall-system/logs"
     os.makedirs(log_dir, exist_ok=True)
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-            logging.FileHandler(f"{log_dir}/agent_debug.log", mode='a')
-        ]
-    )
-    logging.debug("Logging initialized successfully for agent.py")
-    with open(f"{log_dir}/agent_debug.log", "a") as f:
-        f.write("Test write to verify file handler\n")
+    file_handler = logging.FileHandler(f"{log_dir}/agent_debug.log", mode='a')
+    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    logger.addHandler(file_handler)
+    logger.debug("Logging initialized successfully for agent.py")
 except Exception as e:
-    print(f"⚠️ Failed to initialize logging for agent.py: {e}")
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        handlers=[logging.StreamHandler(sys.stdout)]
-    )
-    logging.warning("Falling back to console-only logging due to file handler error")
+    print(f"⚠️ Failed to initialize file logging for agent.py: {e}")
+    logger.warning("Falling back to console-only logging due to file handler error")
 
 class BuildAgent:
     def __init__(self, test_mode=False):
@@ -81,9 +78,9 @@ class BuildAgent:
 
         # Debug: Verify agent_manager has delegate_task
         if not hasattr(self.agent_manager, 'delegate_task'):
-            logging.error("AgentManager instance missing delegate_task method")
+            logger.error("AgentManager instance missing delegate_task method")
         else:
-            logging.debug("AgentManager instance has delegate_task method")
+            logger.debug("AgentManager instance has delegate_task method")
 
         print(
             f"🔧 [BuildAgent __init__] Initialized with test_mode={self.test_mode}\n"
@@ -100,9 +97,9 @@ class BuildAgent:
                     self.debug_logs = json.load(f)
             else:
                 self.debug_logs = []
-            logging.debug(f"Loaded debug logs: {self.debug_logs}")
+            logger.debug(f"Loaded debug logs: {self.debug_logs}")
         except Exception as e:
-            logging.error(f"Failed to load debug logs: {e}")
+            logger.error(f"Failed to load debug logs: {e}")
             self.debug_logs = []
 
     def log_entry(self, collection_name, entry_id, data):
@@ -114,7 +111,7 @@ class BuildAgent:
             documents=[json.dumps(data)],
             metadatas=[meta]
         )
-        logging.info(f"Logged entry '{entry_id}' to {collection_name}")
+        logger.info(f"Logged entry '{entry_id}' to {collection_name}")
 
     def retrieve_context(self, query):
         """Retrieve context for the query using aggregator_search."""
@@ -124,17 +121,17 @@ class BuildAgent:
             code_context = [r["document"] for r in results if r.get("metadata", {}).get("filename", "").endswith(".py")]
             context = "\n".join(guidelines_context[:1] + code_context[:2])
             if not context:
-                logging.warning(f"No relevant context (guidelines or Python code) found for query: {query}")
+                logger.warning(f"No relevant context (guidelines or Python code) found for query: {query}")
                 guidelines_results = aggregator_search(query, top_n=1, mode="guidelines_code")
                 guidelines_context = [r["document"] for r in guidelines_results if r.get("metadata", {}).get("filename") == "ai_coding_guidelines.md"]
                 context = "\n".join(guidelines_context[:1])[:1000] if guidelines_context else ""
                 if not context:
-                    logging.error(f"Failed to retrieve any context for query: {query}")
+                    logger.error(f"Failed to retrieve any context for query: {query}")
             context = context[:1000] if len(context) > 1000 else context
-            logging.debug(f"Filtered context for query '{query}' (guidelines + Python, max 1000 chars): {context}...")
+            logger.debug(f"Filtered context for query '{query}' (guidelines + Python, max 1000 chars): {context}...")
             return context
         except Exception as e:
-            logging.error(f"Error retrieving context for query '{query}': {e}")
+            logger.error(f"Error retrieving context for query '{query}': {e}")
             return ""
 
     def reset_state(self):
@@ -167,18 +164,18 @@ def authenticate_user(user_data):
 
         with open(self.debug_log_file, "w") as f:
             json.dump(debug_logs, f, indent=4)
-        logging.debug(f"Reset debug logs to: {json.dumps(debug_logs, indent=4)}")
-        logging.info("Reset test scripts and debug logs to initial states.")
+        logger.debug(f"Reset debug logs to: {json.dumps(debug_logs, indent=4)}")
+        logger.info("Reset test scripts and debug logs to initial states.")
 
     def run(self):
         """Run the agent to process unresolved issues with retry logic."""
-        logging.info("Starting Build Agent with blueprint-driven execution and RAG for ai_coding_guidelines.md...")
+        logger.info("Starting Build Agent with blueprint-driven execution and RAG for ai_coding_guidelines.md...")
         
         self.reset_state()
         
         blueprint_path = f"{self.project_dir}/blueprints/agent_blueprint_v1.json"
         if not os.path.exists(blueprint_path):
-            logging.error(f"Blueprint not found: {blueprint_path}")
+            logger.error(f"Blueprint not found: {blueprint_path}")
             return
 
         with open(blueprint_path, "r") as f:
@@ -191,7 +188,7 @@ def authenticate_user(user_data):
             unresolved = [log for log in logs if not log.get("resolved", False)]
             
             if not unresolved:
-                logging.info("No unresolved issues—exiting.")
+                logger.info("No unresolved issues—exiting.")
                 break
             
             for log in unresolved:
@@ -202,19 +199,19 @@ def authenticate_user(user_data):
 
                 script_name = stack_trace.split("'")[1] if "'" in stack_trace else None
                 if not script_name:
-                    logging.warning(f"Skipping log {error_id}—no script")
+                    logger.warning(f"Skipping log {error_id}—no script")
                     continue
 
                 script_path = os.path.join(self.project_dir, "code_base/test_scripts", script_name)
                 if not os.path.exists(script_path):
-                    logging.warning(f"Script {script_name} not found—skipping")
+                    logger.warning(f"Script {script_name} not found—skipping")
                     continue
 
                 with open(script_path, "r") as f:
                     script_content = f.read()
 
                 context = self.retrieve_context(f"{error} in {script_name}")
-                logging.info(f"Filtered context for {error_id} (guidelines + Python, max 1000 chars): {context}...")
+                logger.info(f"Filtered context for {error_id} (guidelines + Python, max 1000 chars): {context}...")
 
                 task_prompt = (
                     f"Please debug the following script and return ONLY the COMPLETE fixed function in Python using a FULL try/except block "
@@ -222,11 +219,11 @@ def authenticate_user(user_data):
                     f"and NO explanations, inside ```python\n{script_content}\n```."
                 )
                 fix = self.agent_manager.delegate_task("engineer", task_prompt, timeout=300)
-                logging.debug(f"Debug: Engineer's fix for {error_id}: {fix}")
+                logger.debug(f"Debug: Engineer's fix for {error_id}: {fix}")
 
                 if fix is None or not fix.strip():
                     if attempt_count < self.max_attempts:
-                        logging.warning(f"No valid fix for {error_id} after {attempt_count} attempts. Retrying...")
+                        logger.warning(f"No valid fix for {error_id} after {attempt_count} attempts. Retrying...")
                         fix = self.agent_manager.delegate_task(
                             "engineer",
                             f"Please debug the following script and return ONLY the COMPLETE fixed function in Python using a FULL try/except block "
@@ -235,17 +232,17 @@ def authenticate_user(user_data):
                             timeout=360
                         )
                     else:
-                        logging.error(f"Max attempts reached for {error_id}—skipping fix to preserve script.")
+                        logger.error(f"Max attempts reached for {error_id}—skipping fix to preserve script.")
                         fix = None
                 elif not isinstance(fix, str) or not fix.strip():
-                    logging.warning(f"Invalid fix format for {error_id}—skipping fix.")
+                    logger.warning(f"Invalid fix format for {error_id}—skipping fix.")
                     fix = None
                 
                 if fix and "```python" in fix:
                     try:
                         fix = re.search(r"```python\s*(.*?)\s*```", fix, re.DOTALL).group(1).strip()
                     except AttributeError:
-                        logging.warning(f"Fix for {error_id} not in expected ```python``` format—using raw response.")
+                        logger.warning(f"Fix for {error_id} not in expected ```python``` format—using raw response.")
                         fix = fix if isinstance(fix, str) else None
                 else:
                     fix = fix if isinstance(fix, str) and fix.strip() else None
@@ -258,7 +255,7 @@ def authenticate_user(user_data):
                         f"to handle the error ({error}), returning None, with NO extra logic, NO prose, and NO explanations, inside ```python ... ```."
                     )
                     reviewed_fix = self.agent_manager.delegate_task("reviewer", review_prompt, timeout=300)
-                    logging.debug(f"Debug: Reviewed fix for {error_id}: {reviewed_fix}")
+                    logger.debug(f"Debug: Reviewed fix for {error_id}: {reviewed_fix}")
 
                 final_fix = fix if fix and fix.strip() else None
                 if reviewed_fix and isinstance(reviewed_fix, str) and reviewed_fix.strip():
@@ -267,16 +264,16 @@ def authenticate_user(user_data):
                             reviewed_fix = re.search(r"```python\s*(.*?)\s*```", reviewed_fix, re.DOTALL).group(1).strip()
                             final_fix = reviewed_fix
                         except AttributeError:
-                            logging.warning(f"Reviewed fix for {error_id} not in expected ```python``` format—using original fix.")
+                            logger.warning(f"Reviewed fix for {error_id} not in expected ```python``` format—using original fix.")
                     else:
                         final_fix = reviewed_fix
 
-                logging.debug(f"Debug: Final fix for {error_id}: {final_fix}")
+                logger.debug(f"Debug: Final fix for {error_id}: {final_fix}")
 
                 temp_script_path = script_path + ".tmp"
                 if os.path.exists(temp_script_path):
                     os.remove(temp_script_path)
-                    logging.debug(f"Cleaned up existing temp file: {temp_script_path}")
+                    logger.debug(f"Cleaned up existing temp file: {temp_script_path}")
 
                 fix_works = False
                 fix_error = "No validation performed"
@@ -292,7 +289,7 @@ def authenticate_user(user_data):
                         else:
                             f.write(final_fix + "\n" + original_content)
 
-                logging.debug(f"Calling run_blueprint for {error_id} with original_error: {error}, script_path: {script_path}")
+                logger.debug(f"Calling run_blueprint for {error_id} with original_error: {error}, script_path: {script_path}")
 
                 blueprint_id = f"bp_fix_{error_id}"
                 execution_trace_id, validation_result = self.blueprint_executor.run_blueprint(
@@ -314,7 +311,6 @@ def authenticate_user(user_data):
                     
                     resolved = fix_works
                     
-                    # Enhanced logging with test input and expected result
                     log_entry = {
                         "id": error_id,
                         "error": error,
@@ -333,18 +329,18 @@ def authenticate_user(user_data):
                     self.log_entry("debugging_logs", error_id, log_entry)
                     
                     reindex_single_file(script_path, self.collections["project_codebase"], self.embed_model)
-                    logging.info(f"Reindexed {script_path}")
+                    logger.info(f"Reindexed {script_path}")
                     
                     logs = [l if l["id"] != error_id else log_entry for l in logs]
                     with open(self.debug_log_file, "w") as f:
                         json.dump(logs, f, indent=4)
-                    logging.debug(f"Updated debug logs for {error_id}: {json.dumps(log_entry, indent=4)}")
+                    logger.debug(f"Updated debug logs for {error_id}: {json.dumps(log_entry, indent=4)}")
 
             if attempt_count >= self.max_attempts:
-                logging.error("Max attempts reached for unresolved issues—exiting.")
+                logger.error("Max attempts reached for unresolved issues—exiting.")
                 break
 
-        logging.info("Completed run and reset state for next test.")
+        logger.info("Completed run and reset state for next test.")
         self.reset_state()
 
 if __name__ == "__main__":
@@ -356,5 +352,5 @@ if __name__ == "__main__":
         agent.reset_state()
     except Exception as e:
         print(f"⚠️ Unexpected error: {e}")
-        logging.error(f"Unexpected error: {e}, traceback: {traceback.format_exc()}")
+        logger.error(f"Unexpected error: {e}, traceback: {traceback.format_exc()}")
         agent.reset_state()
