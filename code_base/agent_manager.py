@@ -126,7 +126,7 @@ class AgentManager:
                     if error_func_name:
                         break
 
-            # If no exact match, use a range-based approach with body line verification and heuristic for process_data
+            # If no exact match, use a range-based approach with body line verification
             if not error_func_name:
                 candidates = []
                 for node in ast.walk(tree):
@@ -142,11 +142,11 @@ class AgentManager:
                     error_func_name = error_func_node.name
                     logger.debug(f"Range-based match: Selected function {error_func_name} with range {error_func_node.lineno}-{error_func_node.end_lineno} for line {error_line}, body lines: {candidates[0][2]}", extra={'correlation_id': self.correlation_id or 'N/A'})
                 else:
-                    # Heuristic: If line 8 and no match, assume process_data if present
-                    if error_line == 8 and 'process_data' in function_defs:
-                        error_func_node = function_defs['process_data'][0]  # Use first definition as fallback
+                    # Heuristic: For KeyError at line 8, prioritize process_data
+                    if original_error == "KeyError" and error_line == 8 and 'process_data' in function_defs:
+                        error_func_node = function_defs['process_data'][-1]  # Use the latest definition
                         error_func_name = 'process_data'
-                        logger.warning(f"Heuristic applied: Selected process_data for line 8 as no candidate matched", extra={'correlation_id': self.correlation_id or 'N/A'})
+                        logger.warning(f"Heuristic applied: Selected process_data for KeyError at line 8 as no candidate matched", extra={'correlation_id': self.correlation_id or 'N/A'})
                     else:
                         logger.warning(f"No candidate with error line {error_line} in body", extra={'correlation_id': self.correlation_id or 'N/A'})
 

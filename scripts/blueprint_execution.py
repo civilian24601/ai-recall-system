@@ -72,12 +72,12 @@ class BlueprintExecution:
             "LLM-based improvement notes enabled with agent_manager."
         )
 
-    def run_blueprint(self, blueprint_id, task_name, script_path, execution_context, final_fix=None, original_error=None, stack_trace=None, correlation_id=None):
+    def run_blueprint(self, blueprint_id, task_name, script_path, execution_context, final_fix=None, original_error=None, stack_trace=None, correlation_id=None, test_input_str=None):
         """Executes a blueprint task, logs BELog, evolves if improved."""
         print(f"⚙️ Running blueprint {blueprint_id}: {task_name}")
         
         logger.debug(f"Entering run_blueprint with blueprint_id: {blueprint_id}, task_name: {task_name}, script_path: {script_path}, "
-                     f"final_fix: {final_fix}, original_error: {original_error}, stack_trace: {stack_trace}", extra={'correlation_id': correlation_id or 'N/A'})
+                     f"final_fix: {final_fix}, original_error: {original_error}, stack_trace: {stack_trace}, test_input_str: {test_input_str}", extra={'correlation_id': correlation_id or 'N/A'})
 
         start_time = time.time()
         temp_script_path = script_path + ".tmp"
@@ -101,64 +101,10 @@ class BlueprintExecution:
                     temp_content = f.read()
                 logger.debug(f"Temp file content after copy: {temp_content}", extra={'correlation_id': correlation_id or 'N/A'})
 
-                # Parse the original script to identify functions
-                try:
-                    tree = ast.parse(original_content)
-                except SyntaxError as e:
-                    logger.error(f"Failed to parse original script: {e}", extra={'correlation_id': correlation_id or 'N/A'})
-                    raise SyntaxError(f"Syntax error in original script: {str(e)}")
-
-                # Parse the fix to identify the function being fixed
-                try:
-                    fix_tree = ast.parse(final_fix)
-                    if not fix_tree.body or not isinstance(fix_tree.body[0], ast.FunctionDef):
-                        logger.error("Fix does not contain a valid function definition", extra={'correlation_id': correlation_id or 'N/A'})
-                        raise ValueError("Fix does not contain a valid function definition")
-                    fixed_func_name = fix_tree.body[0].name
-                    logger.debug(f"Fix targets function: {fixed_func_name}", extra={'correlation_id': correlation_id or 'N/A'})
-                except SyntaxError as e:
-                    logger.error(f"Fix has syntax errors: {e}", extra={'correlation_id': correlation_id or 'N/A'})
-                    raise SyntaxError(f"Invalid fix format: {str(e)}")
-
-                # Split the original script into lines
-                script_lines = original_content.split('\n')
-                new_script_lines = []
-                in_target_function = False
-                target_func_indent = None
-                replaced = False
-
-                # Identify the target function in the original script and replace it
-                for line in script_lines:
-                    stripped_line = line.strip()
-                    if stripped_line.startswith(f"def {fixed_func_name}("):
-                        in_target_function = True
-                        target_func_indent = len(line) - len(line.lstrip())
-                        new_script_lines.append(line)  # Keep the def line
-                        # Replace the body with the fixed function
-                        fixed_func_body = final_fix.split('\n')[1:]  # Skip the def line of the fix
-                        for fix_line in fixed_func_body:
-                            if fix_line.strip():
-                                new_script_lines.append(fix_line)
-                        replaced = True
-                        continue
-                    elif in_target_function:
-                        # Skip lines until we exit the function scope
-                        if stripped_line and (len(line) - len(line.lstrip())) <= target_func_indent:
-                            in_target_function = False
-                        continue
-                    new_script_lines.append(line)
-
-                # If the function wasn't found, append the fix
-                if not replaced:
-                    logger.warning(f"Target function {fixed_func_name} not found in original script, appending fix", extra={'correlation_id': correlation_id or 'N/A'})
-                    new_script_lines.append("")
-                    new_script_lines.extend(final_fix.split('\n'))
-
-                # Write the merged content to the temp file
-                merged_content = '\n'.join(new_script_lines)
+                # Write the final_fix to the temp file (temporary fix)
                 with open(temp_script_path, "w") as f:
-                    f.write(merged_content)
-                logger.debug(f"Temp file content after merging fix: {merged_content}", extra={'correlation_id': correlation_id or 'N/A'})
+                    f.write(final_fix + "\n")
+                logger.debug(f"Temp file content after applying fix: {open(temp_script_path, 'r').read()}", extra={'correlation_id': correlation_id or 'N/A'})
 
                 # Validate the fix
                 logger.debug(f"Validating fix for {script_path} with original_error: {original_error}", extra={'correlation_id': correlation_id or 'N/A'})
@@ -177,7 +123,7 @@ class BlueprintExecution:
                     logger.debug(f"Validation passed, applying fix by moving {temp_script_path} to {script_path}", extra={'correlation_id': correlation_id or 'N/A'})
                     shutil.move(temp_script_path, script_path)
                     logger.info(f"Applied valid fix to {script_path}", extra={'correlation_id': correlation_id or 'N/A'})
-                    task_result = merged_content
+                    task_result = final_fix
                     success = True
                 else:
                     if os.path.exists(temp_script_path):
