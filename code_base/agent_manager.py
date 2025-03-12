@@ -83,35 +83,7 @@ class AgentManager:
                 return False, f"Failed to read script file: {str(e)}"
             logger.debug(f"Original script content: {script_content}", extra={'correlation_id': self.correlation_id or 'N/A'})
 
-            # Remove duplicate function definitions to avoid AST confusion
-            functions = {}
-            lines = script_content.split('\n')
-            for i, line in enumerate(lines):
-                if line.strip().startswith('def '):
-                    func_name = line.split('def ')[1].split('(')[0].strip()
-                    functions[func_name] = i
-
-            # Keep only the latest definition of each function
-            cleaned_lines = []
-            seen = set()
-            for i in range(len(lines) - 1, -1, -1):  # Iterate backwards to keep the latest definition
-                line = lines[i]
-                if line.strip().startswith('def '):
-                    func_name = line.split('def ')[1].split('(')[0].strip()
-                    if func_name not in seen:
-                        seen.add(func_name)
-                        cleaned_lines.insert(0, line)
-                    continue
-                cleaned_lines.insert(0, line)
-
-            cleaned_content = '\n'.join(cleaned_lines)
-            logger.debug(f"Cleaned script content: {cleaned_content}", extra={'correlation_id': self.correlation_id or 'N/A'})
-
-            # Parse the cleaned script into an AST
-            tree = ast.parse(cleaned_content)
-            logger.debug("Parsed script into AST", extra={'correlation_id': self.correlation_id or 'N/A'})
-
-            # Extract the line number from the stack_trace
+            # Extract the line number from the stack_trace first
             line_match = re.search(r"line (\d+)", stack_trace)
             if not line_match:
                 logger.error("Could not extract line number from stack_trace", extra={'correlation_id': self.correlation_id or 'N/A'})
@@ -119,59 +91,93 @@ class AgentManager:
             error_line = int(line_match.group(1))
             logger.debug(f"Error line from stack_trace: {error_line}", extra={'correlation_id': self.correlation_id or 'N/A'})
 
-            # Find the function containing the exact error line within its body
-            target_func = None
+            # Parse the script into an AST
+            try:
+                tree = ast.parse(script_content)
+            except SyntaxError as e:
+                logger.error(f"Failed to parse script: {e}", extra={'correlation_id': self.correlation_id or 'N/A'})
+                return False, f"Syntax error in script: {str(e)}"
+
+            # Find all function definitions and track duplicates
+            function_defs = {}
             for node in ast.walk(tree):
                 if isinstance(node, ast.FunctionDef):
-                    for item in node.body:
-                        for child in ast.walk(item):
-                            if hasattr(child, 'lineno') and child.lineno == error_line and isinstance(child, (ast.Return, ast.Assign, ast.Expr)):
-                                target_func = node
-                                logger.debug(f"Matched target function {node.name} with exact line {error_line} in body", extra={'correlation_id': self.correlation_id or 'N/A'})
-                                break
-                        if target_func:
+                    if node.name not in function_defs:
+                        function_defs[node.name] = []
+                    function_defs[node.name].append(node)
+            logger.debug(f"Found function definitions: {list(function_defs.keys())}", extra={'correlation_id': self.correlation_id or 'N/A'})
+
+            # Identify the target function containing the error line
+            error_func_name = None
+            error_func_node = None
+            duplicate_funcs = {name: defs for name, defs in function_defs.items() if len(defs) > 1}
+            logger.debug(f"Found duplicate functions: {list(duplicate_funcs.keys())}", extra={'correlation_id': self.correlation_id or 'N/A'})
+
+            # First, look for exact matches to the error line
+            for node in ast.walk(tree):
+                if isinstance(node, ast.FunctionDef):
+                    for body_item in ast.walk(node):
+                        if hasattr(body_item, 'lineno') and body_item.lineno == error_line and isinstance(body_item, (ast.Return, ast.Assign, ast.Expr)):
+                            error_func_name = node.name
+                            error_func_node = node
+                            logger.debug(f"Found function {node.name} with exact error line {error_line}", extra={'correlation_id': self.correlation_id or 'N/A'})
                             break
-                    if target_func:
+                    if error_func_name:
                         break
-            if not target_func:
-                # Fallback to range-based matching with detailed logging
+
+            # If no exact match, use a range-based approach with prioritization
+            if not error_func_name:
+                candidates = []
                 for node in ast.walk(tree):
                     if isinstance(node, ast.FunctionDef):
-                        if node.lineno <= error_line <= node.end_lineno:
-                            target_func = node
-                            logger.warning(f"Fallback: Matched target function {node.name} by range {node.lineno}-{node.end_lineno} for line {error_line}", extra={'correlation_id': self.correlation_id or 'N/A'})
-                            # Log all body line numbers for debugging
-                            body_lines = [child.lineno for child in ast.walk(node) if hasattr(child, 'lineno')]
-                            logger.debug(f"Function {node.name} body lines: {body_lines}", extra={'correlation_id': self.correlation_id or 'N/A'})
-                            # Verify error line is in body
-                            if error_line not in body_lines:
-                                logger.warning(f"Error line {error_line} not found in {node.name} body lines {body_lines}", extra={'correlation_id': self.correlation_id or 'N/A'})
-                                target_func = None
-                                continue
-                            break
-            if not target_func:
-                logger.error("No function found containing the error line", extra={'correlation_id': self.correlation_id or 'N/A'})
-                return False, "No function found at error line"
+                        if hasattr(node, 'lineno') and hasattr(node, 'end_lineno'):
+                            if node.lineno <= error_line <= node.end_lineno:
+                                range_size = node.end_lineno - node.lineno
+                                candidates.append((node, range_size))
+                if candidates:
+                    candidates.sort(key=lambda x: x[1])  # Sort by smallest range
+                    error_func_node = candidates[0][0]
+                    error_func_name = error_func_node.name
+                    logger.debug(f"Range-based match: Selected function {error_func_name} with range {error_func_node.lineno}-{error_func_node.end_lineno} for line {error_line}", extra={'correlation_id': self.correlation_id or 'N/A'})
+                    body_lines = [getattr(child, 'lineno', -1) for child in ast.walk(error_func_node) if hasattr(child, 'lineno')]
+                    if error_line not in body_lines:
+                        closest_line = min(body_lines, key=lambda x: abs(x - error_line) if x > 0 else float('inf'))
+                        logger.warning(f"Error line {error_line} not found in body. Closest line is {closest_line}", extra={'correlation_id': self.correlation_id or 'N/A'})
 
-            func_name = target_func.name
-            logger.debug(f"Found target function: {func_name} at lines {target_func.lineno}-{target_func.end_lineno}", extra={'correlation_id': self.correlation_id or 'N/A'})
+            if not error_func_name:
+                logger.error(f"Could not find function containing line {error_line}", extra={'correlation_id': self.correlation_id or 'N/A'})
+                return False, f"No function found containing error line {error_line}"
+
+            logger.debug(f"Target function identified: {error_func_name}", extra={'correlation_id': self.correlation_id or 'N/A'})
+
+            # Handle duplicates by using the latest definition
+            if error_func_name in duplicate_funcs:
+                duplicate_defs = duplicate_funcs[error_func_name]
+                duplicate_defs.sort(key=lambda x: x.lineno)
+                error_func_node = duplicate_defs[-1]  # Use the latest definition
+                logger.debug(f"Using latest definition of {error_func_name} at line {error_func_node.lineno}", extra={'correlation_id': self.correlation_id or 'N/A'})
 
             # Parse the AI-generated fix
-            fix_tree = ast.parse(fix)
+            try:
+                fix_tree = ast.parse(fix)
+            except SyntaxError as e:
+                logger.error(f"Fix has syntax errors: {e}", extra={'correlation_id': self.correlation_id or 'N/A'})
+                return False, f"Invalid fix format: {str(e)}"
             if not fix_tree.body or not isinstance(fix_tree.body[0], ast.FunctionDef):
                 logger.error("Fix does not contain a valid function definition", extra={'correlation_id': self.correlation_id or 'N/A'})
-                return False, "Invalid fix format"
+                return False, "Invalid fix format: missing function definition"
             fix_func = fix_tree.body[0]
-            if fix_func.name != func_name:
-                logger.error(f"Fix function name {fix_func.name} does not match target function {func_name}", extra={'correlation_id': self.correlation_id or 'N/A'})
-                return False, "Fix function name mismatch"
+            if fix_func.name != error_func_name:
+                logger.error(f"Fix function name {fix_func.name} does not match target function {error_func_name}", extra={'correlation_id': self.correlation_id or 'N/A'})
+                return False, f"Fix function name mismatch: expected {error_func_name}, got {fix_func.name}"
 
             # Replace the target function's body with the fixed body
-            target_func.body = fix_func.body
-            logger.debug(f"Applied fix to function {func_name}", extra={'correlation_id': self.correlation_id or 'N/A'})
+            error_func_node.body = fix_func.body
+            logger.debug(f"Applied fix to function {error_func_name}", extra={'correlation_id': self.correlation_id or 'N/A'})
 
-            # Extract argument names for dynamic test case generation
-            arg_names = [arg.arg for arg in target_func.args.args]
+            # Extract argument names from the actual error function
+            arg_names = [arg.arg for arg in error_func_node.args.args]
+            logger.debug(f"Function {error_func_name} takes arguments: {arg_names}", extra={'correlation_id': self.correlation_id or 'N/A'})
 
             # Use test_input from the log entry if provided and valid, otherwise generate
             if test_input_str and test_input_str != "None":
@@ -179,7 +185,7 @@ class AgentManager:
                     test_input = ast.literal_eval(test_input_str)
                     logger.debug(f"Using provided test_input: {test_input}", extra={'correlation_id': self.correlation_id or 'N/A'})
                     handler = get_error_handler(original_error)
-                    _, self.expected_result = handler.generate_test_case(arg_names)  # Ensure expected_result is set
+                    _, self.expected_result = handler.generate_test_case(arg_names)
                 except (ValueError, SyntaxError):
                     logger.warning(f"Invalid test_input_str: {test_input_str}, falling back to generator", extra={'correlation_id': self.correlation_id or 'N/A'})
                     handler = get_error_handler(original_error)
@@ -191,21 +197,40 @@ class AgentManager:
                 logger.error(f"No test case defined for {original_error}", extra={'correlation_id': self.correlation_id or 'N/A'})
                 return False, f"No test case for {original_error}"
 
-            # Adjust test_input to match the number of arguments
+            # Ensure test_input matches the number of arguments
             if isinstance(test_input, (tuple, list)):
                 if len(arg_names) != len(test_input):
-                    logger.warning(f"Adjusting test_input {test_input} to match {len(arg_names)} arguments for {func_name}", extra={'correlation_id': self.correlation_id or 'N/A'})
+                    logger.warning(f"Adjusting test_input {test_input} to match {len(arg_names)} arguments for {error_func_name}", extra={'correlation_id': self.correlation_id or 'N/A'})
                     handler = get_error_handler(original_error)
                     test_input, self.expected_result = handler.generate_test_case(arg_names)
-            test_call = f"{func_name}({', '.join(map(str, test_input) if isinstance(test_input, (tuple, list)) else [str(test_input)])})"
+
+            # Format the test call
+            test_input_repr = test_input if isinstance(test_input, (tuple, list)) else [test_input]
+            test_call = f"{error_func_name}({', '.join(repr(arg) for arg in test_input_repr)})"
             logger.debug(f"Generated test call: {test_call}", extra={'correlation_id': self.correlation_id or 'N/A'})
 
-            # Create a new module AST for the test script
-            test_module = ast.Module(body=[
+            # Create a new, clean module for testing
+            test_module_body = [
                 ast.Import(names=[ast.alias(name='sys', asname=None)]),
-                ast.ImportFrom(module='io', names=[ast.alias(name='StringIO', asname=None)], level=0),
-            ] + list(tree.body) + [  # Include all functions from the original script
-                ast.parse(f"""
+                ast.ImportFrom(module='io', names=[ast.alias(name='StringIO', asname=None)], level=0)
+            ]
+
+            # Add only the latest function definitions
+            added_funcs = set()
+            for node in tree.body:
+                if isinstance(node, ast.FunctionDef):
+                    if node.name not in added_funcs:
+                        if node.name in duplicate_funcs:
+                            latest_func = duplicate_funcs[node.name][-1]
+                            test_module_body.append(latest_func)
+                        else:
+                            test_module_body.append(node)
+                        added_funcs.add(node.name)
+                else:
+                    test_module_body.append(node)
+
+            # Add test runner function
+            run_test_func = ast.parse(f"""
 def run_test():
     original_stdout = sys.stdout
     sys.stdout = StringIO()
@@ -217,16 +242,25 @@ def run_test():
     except Exception as e:
         sys.stdout = original_stdout
         return False, str(e)
-                """).body[0],
-                ast.parse("""
+        """).body[0]
+            test_module_body.append(run_test_func)
+
+            # Add main block
+            main_block = ast.parse("""
 if __name__ == "__main__":
     result, error = run_test()
     print("Test result:", "Success" if result else "Failed: " + error)
-                """).body[0]
-            ], type_ignores=[])
+        """).body[0]
+            test_module_body.append(main_block)
 
-            # Unparse the test script with correct formatting
-            test_code = ast.unparse(test_module)
+            test_module = ast.Module(body=test_module_body, type_ignores=[])
+
+            # Generate and write the test code
+            try:
+                test_code = ast.unparse(test_module)
+            except Exception as e:
+                logger.error(f"Failed to unparse test module: {e}", extra={'correlation_id': self.correlation_id or 'N/A'})
+                return False, f"Failed to generate test code: {str(e)}"
             logger.debug(f"Generated test code: {test_code}", extra={'correlation_id': self.correlation_id or 'N/A'})
 
             temp_test_path = script_path + ".test"
