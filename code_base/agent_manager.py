@@ -74,14 +74,15 @@ class AgentManager:
         """Test if the fix handles the original error using AST for parsing and modification."""
         logger.debug(f"Starting test_fix for script_path: {script_path}, original_error: {original_error}, stack_trace: {stack_trace}, test_input_str: {test_input_str}", extra={'correlation_id': self.correlation_id or 'N/A'})
         try:
-            # Read the script content
+            # Read the script content from the original file
             try:
                 with open(script_path, "r") as f:
-                    script_content = f.read()
+                    original_file_content = f.read()
+                logger.debug(f"Raw file content: {original_file_content}", extra={'correlation_id': self.correlation_id or 'N/A'})
             except Exception as e:
                 logger.error(f"Failed to read script file {script_path}: {e}", extra={'correlation_id': self.correlation_id or 'N/A'})
                 return False, f"Failed to read script file: {str(e)}"
-            logger.debug(f"Original script content: {script_content}", extra={'correlation_id': self.correlation_id or 'N/A'})
+            script_content = original_file_content  # Use raw content for now
 
             # Extract the line number from the stack_trace first
             line_match = re.search(r"line (\d+)", stack_trace)
@@ -125,24 +126,23 @@ class AgentManager:
                     if error_func_name:
                         break
 
-            # If no exact match, use a range-based approach with prioritization
+            # If no exact match, use a range-based approach with body line verification
             if not error_func_name:
                 candidates = []
                 for node in ast.walk(tree):
                     if isinstance(node, ast.FunctionDef):
                         if hasattr(node, 'lineno') and hasattr(node, 'end_lineno'):
-                            if node.lineno <= error_line <= node.end_lineno:
+                            body_lines = [getattr(child, 'lineno', -1) for child in ast.walk(node) if hasattr(child, 'lineno')]
+                            if error_line in body_lines and node.lineno <= error_line <= node.end_lineno:
                                 range_size = node.end_lineno - node.lineno
-                                candidates.append((node, range_size))
+                                candidates.append((node, range_size, body_lines))
                 if candidates:
                     candidates.sort(key=lambda x: x[1])  # Sort by smallest range
                     error_func_node = candidates[0][0]
                     error_func_name = error_func_node.name
-                    logger.debug(f"Range-based match: Selected function {error_func_name} with range {error_func_node.lineno}-{error_func_node.end_lineno} for line {error_line}", extra={'correlation_id': self.correlation_id or 'N/A'})
-                    body_lines = [getattr(child, 'lineno', -1) for child in ast.walk(error_func_node) if hasattr(child, 'lineno')]
-                    if error_line not in body_lines:
-                        closest_line = min(body_lines, key=lambda x: abs(x - error_line) if x > 0 else float('inf'))
-                        logger.warning(f"Error line {error_line} not found in body. Closest line is {closest_line}", extra={'correlation_id': self.correlation_id or 'N/A'})
+                    logger.debug(f"Range-based match: Selected function {error_func_name} with range {error_func_node.lineno}-{error_func_node.end_lineno} for line {error_line}, body lines: {candidates[0][2]}", extra={'correlation_id': self.correlation_id or 'N/A'})
+                else:
+                    logger.warning(f"No candidate with error line {error_line} in body", extra={'correlation_id': self.correlation_id or 'N/A'})
 
             if not error_func_name:
                 logger.error(f"Could not find function containing line {error_line}", extra={'correlation_id': self.correlation_id or 'N/A'})
