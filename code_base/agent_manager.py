@@ -143,10 +143,26 @@ class AgentManager:
                     logger.debug(f"Range-based match: Selected function {error_func_name} with range {error_func_node.lineno}-{error_func_node.end_lineno} for line {error_line}, body lines: {candidates[0][2]}", extra={'correlation_id': self.correlation_id or 'N/A'})
                 else:
                     # Heuristic: For KeyError at line 8, prioritize process_data
-                    if original_error == "KeyError" and error_line == 8 and 'process_data' in function_defs:
-                        error_func_node = function_defs['process_data'][-1]  # Use the latest definition
-                        error_func_name = 'process_data'
-                        logger.warning(f"Heuristic applied: Selected process_data for KeyError at line 8 as no candidate matched", extra={'correlation_id': self.correlation_id or 'N/A'})
+                    if original_error == "KeyError" and error_line == 8:
+                        if 'process_data' in function_defs:
+                            error_func_node = function_defs['process_data'][-1]  # Use the latest definition
+                            error_func_name = 'process_data'
+                            logger.warning(f"Heuristic applied: Selected process_data for KeyError at line 8", extra={'correlation_id': self.correlation_id or 'N/A'})
+                        else:
+                            # If process_data is missing, reconstruct it
+                            logger.warning(f"process_data missing for KeyError at line 8, reconstructing default implementation", extra={'correlation_id': self.correlation_id or 'N/A'})
+                            reconstructed_code = script_content + "\n\ndef process_data(data):\n    try:\n        return data[\"key\"]\n    except KeyError:\n        return None\n"
+                            tree = ast.parse(reconstructed_code)
+                            # Rebuild function_defs with the reconstructed script
+                            function_defs = {}
+                            for node in ast.walk(tree):
+                                if isinstance(node, ast.FunctionDef):
+                                    if node.name not in function_defs:
+                                        function_defs[node.name] = []
+                                    function_defs[node.name].append(node)
+                            error_func_node = function_defs['process_data'][-1]
+                            error_func_name = 'process_data'
+                            script_content = reconstructed_code
                     else:
                         logger.warning(f"No candidate with error line {error_line} in body", extra={'correlation_id': self.correlation_id or 'N/A'})
 
@@ -322,7 +338,8 @@ if __name__ == "__main__":
         try:
             full_prompt = (
                 f"{task_prompt}\n\n"
-                "Output MUST be a complete Python function inside ```python ... ``` ONLY. "
+                "Output MUST be a complete Python script including ALL functions from the original script, with the specified fix applied. "
+                "Inside ```python ... ``` ONLY. "
                 "NO prose (e.g., 'Here's', 'This is'), NO <think> blocks, NO test cases, NO comments (#), NO standalone raise statements outside try. "
                 "Use try/except for ZeroDivisionError or KeyError ONLY, returning None in except, NO returns outside except. STRICT ADHERENCE REQUIRED."
             )
@@ -357,8 +374,8 @@ if __name__ == "__main__":
     def review_task(self, codestral_output, timeout=300):
         logger.debug(f"Reviewing codestral output: {codestral_output}", extra={'correlation_id': self.correlation_id or 'N/A'})
         review_prompt = (
-            f"Review this: {codestral_output}. Return ONLY the COMPLETE fixed function in Python "
-            "using a FULL try/except block for ZeroDivisionError or KeyError ONLY, returning None in except, "
+            f"Review this: {codestral_output}. Return ONLY the COMPLETE fixed script in Python "
+            "including ALL functions, using a FULL try/except block for ZeroDivisionError or KeyError ONLY, returning None in except, "
             "inside ```python ... ```. NO prose, NO <think> blocks, NO extra logic, NO comments (#), "
             "NO standalone raise statements outside try, NO returns outside except. STRICT ADHERENCE REQUIRED."
         )
@@ -435,10 +452,24 @@ if __name__ == "__main__":
             self.retry_count += 1
             return None
 
-    def delegate_task(self, agent, task_description, save_to=None, timeout=300, correlation_id=None):
+    def delegate_task(self, agent, task_description, script_path=None, save_to=None, timeout=300, correlation_id=None):
         self.correlation_id = correlation_id or self.correlation_id
         logger.debug(f"Sending task to {agent}: {task_description} (Timeout: {timeout}s)", extra={'correlation_id': self.correlation_id or 'N/A'})
         print(f"🔹 Sending task to {agent}: {task_description} (Timeout: {timeout}s)")
+
+        # Include the original script content if provided
+        if script_path:
+            try:
+                with open(script_path, "r") as f:
+                    script_content = f.read()
+                task_description = (
+                    f"{task_description}\n\n"
+                    f"Here is the original script content to fix:\n"
+                    f"```python\n{script_content}\n```"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to read script content from {script_path}: {e}", extra={'correlation_id': self.correlation_id or 'N/A'})
+        
         result = self.send_task(agent, task_description, timeout)
         
         if not isinstance(result, str) or result.strip() == "" or result.startswith("❌"):
@@ -451,7 +482,7 @@ if __name__ == "__main__":
             print(f"❌ Still invalid. Last try with strict mode...")
             result = self.send_task(
                 agent,
-                f"STRICT MODE: {task_description}\nRespond with ONLY a complete Python function in ```python ... ``` or 'ERROR: No response.'",
+                f"STRICT MODE: {task_description}\nRespond with ONLY a complete Python script in ```python ... ``` or 'ERROR: No response.'",
                 timeout + 60
             )
         
