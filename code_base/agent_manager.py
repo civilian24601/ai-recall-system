@@ -78,8 +78,19 @@ class AgentManager:
                 script_content = f.read()
             logger.debug(f"Original script content: {script_content}", extra={'correlation_id': self.correlation_id or 'N/A'})
 
-            # Parse the script into an AST
-            tree = ast.parse(script_content)
+            # Remove duplicate function definitions to avoid AST confusion
+            functions = {}
+            lines = script_content.split('\n')
+            for i, line in enumerate(lines):
+                if line.strip().startswith('def '):
+                    func_name = line.split('def ')[1].split('(')[0].strip()
+                    if func_name not in functions or i > functions[func_name]:
+                        functions[func_name] = i
+            cleaned_content = '\n'.join(lines[max(functions.values()) if func in functions else i for i, line in enumerate(lines) if not (line.strip().startswith('def ') and i < functions.get(line.split('def ')[1].split('(')[0].strip(), float('inf'))))
+            logger.debug(f"Cleaned script content: {cleaned_content}", extra={'correlation_id': self.correlation_id or 'N/A'})
+
+            # Parse the cleaned script into an AST
+            tree = ast.parse(cleaned_content)
             logger.debug("Parsed script into AST", extra={'correlation_id': self.correlation_id or 'N/A'})
 
             # Extract the line number from the stack_trace
@@ -114,6 +125,10 @@ class AgentManager:
                             # Log all body line numbers for debugging
                             body_lines = [child.lineno for child in ast.walk(node) if hasattr(child, 'lineno')]
                             logger.debug(f"Function {node.name} body lines: {body_lines}", extra={'correlation_id': self.correlation_id or 'N/A'})
+                            # Verify error line is in body
+                            if error_line not in body_lines:
+                                logger.warning(f"Error line {error_line} not found in {node.name} body lines {body_lines}", extra={'correlation_id': self.correlation_id or 'N/A'})
+                                continue
                             break
             if not target_func:
                 logger.error("No function found containing the error line", extra={'correlation_id': self.correlation_id or 'N/A'})
