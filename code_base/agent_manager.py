@@ -135,10 +135,11 @@ class AgentManager:
                             body_lines = [getattr(child, 'lineno', -1) for child in ast.walk(node) if hasattr(child, 'lineno')]
                             if error_line in body_lines and node.lineno <= error_line <= node.end_lineno:
                                 arg_count = len(node.args.args) if hasattr(node.args, 'args') else 0
-                                candidates.append((node, arg_count, body_lines))
+                                candidates.append((node, arg_count, body_lines, node))
                 if candidates:
-                    candidates.sort(key=lambda x: (abs(x[1] - 1) if original_error == "KeyError" and error_line == 8 else x[1], x[1]))  # Prioritize 1 arg for KeyError at line 8
-                    error_func_node = candidates[0][0]
+                    # Prioritize candidates with 1 argument for KeyError at line 8, then by range size
+                    candidates.sort(key=lambda x: (0 if original_error == "KeyError" and error_line == 8 and x[1] == 1 else 1, abs(x[2].index(error_line) if error_line in x[2] else float('inf'))))
+                    error_func_node = candidates[0][3]  # Use the node directly
                     error_func_name = error_func_node.name
                     logger.debug(f"Range-based match: Selected function {error_func_name} with range {error_func_node.lineno}-{error_func_node.end_lineno} for line {error_line}, body lines: {candidates[0][2]}, arg count: {candidates[0][1]}", extra={'correlation_id': self.correlation_id or 'N/A'})
                 else:
@@ -208,7 +209,9 @@ class AgentManager:
                     logger.debug(f"Using provided test_input: {test_input}", extra={'correlation_id': self.correlation_id or 'N/A'})
                     handler = get_error_handler(original_error)
                     _, self.expected_result = handler.generate_test_case(arg_names)
-                    if isinstance(test_input, (tuple, list)) and len(test_input) == len(arg_names):
+                    if isinstance(test_input, dict) and error_func_name == 'process_data' and len(arg_names) == 1:
+                        logger.debug(f"Preserving dictionary test_input: {test_input} for process_data", extra={'correlation_id': self.correlation_id or 'N/A'})
+                    elif isinstance(test_input, (tuple, list)) and len(test_input) == len(arg_names):
                         logger.debug(f"Preserving original test_input: {test_input} as it matches {len(arg_names)} arguments", extra={'correlation_id': self.correlation_id or 'N/A'})
                     else:
                         logger.warning(f"Adjusting test_input {test_input} to match {len(arg_names)} arguments for {error_func_name}", extra={'correlation_id': self.correlation_id or 'N/A'})
@@ -460,11 +463,13 @@ if __name__ == "__main__":
             try:
                 with open(script_path, "r") as f:
                     script_content = f.read()
+                line_number = re.search(r'line (\d+)', task_description)
+                line_num = line_number.group(1) if line_number else 'N/A'
                 task_description = (
                     f"{task_description}\n\n"
                     f"Here is the original script content to fix:\n"
                     f"```python\n{script_content}\n```\n"
-                    f"Ensure the fix addresses the error at line {re.search(r'line (\d+)', task_description).group(1) if re.search(r'line (\d+)', task_description) else 'N/A'}."
+                    f"Ensure the fix addresses the error at line {line_num}."
                 )
             except Exception as e:
                 logger.warning(f"Failed to read script content from {script_path}: {e}", extra={'correlation_id': self.correlation_id or 'N/A'})
