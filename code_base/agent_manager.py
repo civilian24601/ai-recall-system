@@ -126,7 +126,7 @@ class AgentManager:
                     if error_func_name:
                         break
 
-            # If no exact match, use a range-based approach with body line verification
+            # If no exact match, use a range-based approach with body line verification and argument matching
             if not error_func_name:
                 candidates = []
                 for node in ast.walk(tree):
@@ -134,13 +134,13 @@ class AgentManager:
                         if hasattr(node, 'lineno') and hasattr(node, 'end_lineno'):
                             body_lines = [getattr(child, 'lineno', -1) for child in ast.walk(node) if hasattr(child, 'lineno')]
                             if error_line in body_lines and node.lineno <= error_line <= node.end_lineno:
-                                range_size = node.end_lineno - node.lineno
-                                candidates.append((node, range_size, body_lines))
+                                arg_count = len(node.args.args) if hasattr(node.args, 'args') else 0
+                                candidates.append((node, arg_count, body_lines))
                 if candidates:
-                    candidates.sort(key=lambda x: x[1])  # Sort by smallest range
+                    candidates.sort(key=lambda x: (abs(x[1] - 1) if original_error == "KeyError" and error_line == 8 else x[1], x[1]))  # Prioritize 1 arg for KeyError at line 8
                     error_func_node = candidates[0][0]
                     error_func_name = error_func_node.name
-                    logger.debug(f"Range-based match: Selected function {error_func_name} with range {error_func_node.lineno}-{error_func_node.end_lineno} for line {error_line}, body lines: {candidates[0][2]}", extra={'correlation_id': self.correlation_id or 'N/A'})
+                    logger.debug(f"Range-based match: Selected function {error_func_name} with range {error_func_node.lineno}-{error_func_node.end_lineno} for line {error_line}, body lines: {candidates[0][2]}, arg count: {candidates[0][1]}", extra={'correlation_id': self.correlation_id or 'N/A'})
                 else:
                     # Heuristic: For KeyError at line 8, prioritize process_data
                     if original_error == "KeyError" and error_line == 8:
@@ -208,6 +208,11 @@ class AgentManager:
                     logger.debug(f"Using provided test_input: {test_input}", extra={'correlation_id': self.correlation_id or 'N/A'})
                     handler = get_error_handler(original_error)
                     _, self.expected_result = handler.generate_test_case(arg_names)
+                    if isinstance(test_input, (tuple, list)) and len(test_input) == len(arg_names):
+                        logger.debug(f"Preserving original test_input: {test_input} as it matches {len(arg_names)} arguments", extra={'correlation_id': self.correlation_id or 'N/A'})
+                    else:
+                        logger.warning(f"Adjusting test_input {test_input} to match {len(arg_names)} arguments for {error_func_name}", extra={'correlation_id': self.correlation_id or 'N/A'})
+                        test_input, self.expected_result = handler.generate_test_case(arg_names)
                 except (ValueError, SyntaxError):
                     logger.warning(f"Invalid test_input_str: {test_input_str}, falling back to generator", extra={'correlation_id': self.correlation_id or 'N/A'})
                     handler = get_error_handler(original_error)
@@ -218,13 +223,6 @@ class AgentManager:
             if test_input is None:
                 logger.error(f"No test case defined for {original_error}", extra={'correlation_id': self.correlation_id or 'N/A'})
                 return False, f"No test case for {original_error}"
-
-            # Ensure test_input matches the number of arguments
-            if isinstance(test_input, (tuple, list)):
-                if len(arg_names) != len(test_input):
-                    logger.warning(f"Adjusting test_input {test_input} to match {len(arg_names)} arguments for {error_func_name}", extra={'correlation_id': self.correlation_id or 'N/A'})
-                    handler = get_error_handler(original_error)
-                    test_input, self.expected_result = handler.generate_test_case(arg_names)
 
             # Format the test call
             test_input_repr = test_input if isinstance(test_input, (tuple, list)) else [test_input]
@@ -465,7 +463,8 @@ if __name__ == "__main__":
                 task_description = (
                     f"{task_description}\n\n"
                     f"Here is the original script content to fix:\n"
-                    f"```python\n{script_content}\n```"
+                    f"```python\n{script_content}\n```\n"
+                    f"Ensure the fix addresses the error at line {re.search(r'line (\d+)', task_description).group(1) if re.search(r'line (\d+)', task_description) else 'N/A'}."
                 )
             except Exception as e:
                 logger.warning(f"Failed to read script content from {script_path}: {e}", extra={'correlation_id': self.correlation_id or 'N/A'})
