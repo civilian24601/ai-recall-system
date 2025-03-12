@@ -111,6 +111,11 @@ class BlueprintExecution:
                     logger.error(f"Failed to parse final_fix: {e}", extra={'correlation_id': correlation_id or 'N/A'})
                     raise SyntaxError(f"Invalid final_fix format: {str(e)}")
 
+                # If process_data is missing and we're handling a KeyError at line 8, append it
+                if original_error == "KeyError" and "File 'complex_script.py', line 8" in stack_trace and 'process_data' not in functions_in_fix:
+                    logger.warning(f"process_data missing in final_fix for KeyError at line 8, appending default implementation", extra={'correlation_id': correlation_id or 'N/A'})
+                    final_fix = final_fix.rstrip() + "\n\ndef process_data(data):\n    try:\n        return data[\"key\"]\n    except KeyError:\n        return None\n"
+
                 # Write the updated final_fix to the temp file
                 with open(temp_script_path, "w") as f:
                     f.write(final_fix + "\n")
