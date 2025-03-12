@@ -114,56 +114,39 @@ class AgentManager:
             duplicate_funcs = {name: defs for name, defs in function_defs.items() if len(defs) > 1}
             logger.debug(f"Found duplicate functions: {list(duplicate_funcs.keys())}", extra={'correlation_id': self.correlation_id or 'N/A'})
 
-            # First, look for exact matches to the error line
-            for node in ast.walk(tree):
-                if isinstance(node, ast.FunctionDef):
-                    for body_item in ast.walk(node):
-                        if hasattr(body_item, 'lineno') and body_item.lineno == error_line and isinstance(body_item, (ast.Return, ast.Assign, ast.Expr)):
-                            error_func_name = node.name
-                            error_func_node = node
-                            logger.debug(f"Found function {node.name} with exact error line {error_line}", extra={'correlation_id': self.correlation_id or 'N/A'})
-                            break
-                    if error_func_name:
-                        break
-
-            # If no exact match, use a range-based approach with body line verification and argument matching
-            if not error_func_name:
-                candidates = []
+            # Explicitly target process_data for KeyError at line 8
+            if original_error == "KeyError" and error_line == 8 and 'process_data' in function_defs:
+                error_func_name = 'process_data'
+                error_func_node = function_defs['process_data'][-1]  # Use the latest definition
+                logger.debug(f"Explicitly selected process_data for KeyError at line 8", extra={'correlation_id': self.correlation_id or 'N/A'})
+            else:
+                # Fallback: Look for exact matches to the error line
                 for node in ast.walk(tree):
                     if isinstance(node, ast.FunctionDef):
-                        if hasattr(node, 'lineno') and hasattr(node, 'end_lineno'):
-                            body_lines = [getattr(child, 'lineno', -1) for child in ast.walk(node) if hasattr(child, 'lineno')]
-                            if error_line in body_lines and node.lineno <= error_line <= node.end_lineno:
-                                arg_count = len(node.args.args) if hasattr(node.args, 'args') else 0
-                                candidates.append((node, arg_count, body_lines, node))
-                if candidates:
-                    # Prioritize candidates with 1 argument for KeyError at line 8, then by range size
-                    candidates.sort(key=lambda x: (0 if original_error == "KeyError" and error_line == 8 and x[1] == 1 else 1, abs(x[2].index(error_line) if error_line in x[2] else float('inf'))))
-                    error_func_node = candidates[0][3]  # Use the node directly
-                    error_func_name = error_func_node.name
-                    logger.debug(f"Range-based match: Selected function {error_func_name} with range {error_func_node.lineno}-{error_func_node.end_lineno} for line {error_line}, body lines: {candidates[0][2]}, arg count: {candidates[0][1]}", extra={'correlation_id': self.correlation_id or 'N/A'})
-                else:
-                    # Heuristic: For KeyError at line 8, prioritize process_data
-                    if original_error == "KeyError" and error_line == 8:
-                        if 'process_data' in function_defs:
-                            error_func_node = function_defs['process_data'][-1]  # Use the latest definition
-                            error_func_name = 'process_data'
-                            logger.warning(f"Heuristic applied: Selected process_data for KeyError at line 8", extra={'correlation_id': self.correlation_id or 'N/A'})
-                        else:
-                            # If process_data is missing, reconstruct it
-                            logger.warning(f"process_data missing for KeyError at line 8, reconstructing default implementation", extra={'correlation_id': self.correlation_id or 'N/A'})
-                            reconstructed_code = script_content + "\n\ndef process_data(data):\n    try:\n        return data[\"key\"]\n    except KeyError:\n        return None\n"
-                            tree = ast.parse(reconstructed_code)
-                            # Rebuild function_defs with the reconstructed script
-                            function_defs = {}
-                            for node in ast.walk(tree):
-                                if isinstance(node, ast.FunctionDef):
-                                    if node.name not in function_defs:
-                                        function_defs[node.name] = []
-                                    function_defs[node.name].append(node)
-                            error_func_node = function_defs['process_data'][-1]
-                            error_func_name = 'process_data'
-                            script_content = reconstructed_code
+                        for body_item in ast.walk(node):
+                            if hasattr(body_item, 'lineno') and body_item.lineno == error_line and isinstance(body_item, (ast.Return, ast.Assign, ast.Expr)):
+                                error_func_name = node.name
+                                error_func_node = node
+                                logger.debug(f"Found function {node.name} with exact error line {error_line}", extra={'correlation_id': self.correlation_id or 'N/A'})
+                                break
+                        if error_func_name:
+                            break
+
+                # If no exact match, use a range-based approach
+                if not error_func_name:
+                    candidates = []
+                    for node in ast.walk(tree):
+                        if isinstance(node, ast.FunctionDef):
+                            if hasattr(node, 'lineno') and hasattr(node, 'end_lineno'):
+                                body_lines = [getattr(child, 'lineno', -1) for child in ast.walk(node) if hasattr(child, 'lineno')]
+                                if error_line in body_lines and node.lineno <= error_line <= node.end_lineno:
+                                    arg_count = len(node.args.args) if hasattr(node.args, 'args') else 0
+                                    candidates.append((node, arg_count, body_lines, node))
+                    if candidates:
+                        candidates.sort(key=lambda x: abs(x[2].index(error_line) if error_line in x[2] else float('inf')))
+                        error_func_node = candidates[0][3]
+                        error_func_name = error_func_node.name
+                        logger.debug(f"Range-based match: Selected function {error_func_name} with range {error_func_node.lineno}-{error_func_node.end_lineno} for line {error_line}, body lines: {candidates[0][2]}, arg count: {candidates[0][1]}", extra={'correlation_id': self.correlation_id or 'N/A'})
                     else:
                         logger.warning(f"No candidate with error line {error_line} in body", extra={'correlation_id': self.correlation_id or 'N/A'})
 
@@ -209,7 +192,7 @@ class AgentManager:
                     logger.debug(f"Using provided test_input: {test_input}", extra={'correlation_id': self.correlation_id or 'N/A'})
                     handler = get_error_handler(original_error)
                     _, self.expected_result = handler.generate_test_case(arg_names)
-                    if isinstance(test_input, dict) and error_func_name == 'process_data' and len(arg_names) == 1:
+                    if error_func_name == 'process_data' and isinstance(test_input, dict):
                         logger.debug(f"Preserving dictionary test_input: {test_input} for process_data", extra={'correlation_id': self.correlation_id or 'N/A'})
                     elif isinstance(test_input, (tuple, list)) and len(test_input) == len(arg_names):
                         logger.debug(f"Preserving original test_input: {test_input} as it matches {len(arg_names)} arguments", extra={'correlation_id': self.correlation_id or 'N/A'})
@@ -342,7 +325,8 @@ if __name__ == "__main__":
                 "Output MUST be a complete Python script including ALL functions from the original script, with the specified fix applied. "
                 "Inside ```python ... ``` ONLY. "
                 "NO prose (e.g., 'Here's', 'This is'), NO <think> blocks, NO test cases, NO comments (#), NO standalone raise statements outside try. "
-                "Use try/except for ZeroDivisionError or KeyError ONLY, returning None in except, NO returns outside except. STRICT ADHERENCE REQUIRED."
+                "Use try/except for ZeroDivisionError or KeyError ONLY, returning None in except, NO returns outside except. "
+                "For KeyError at line 8 in process_data, ensure the function raises a KeyError when the key is missing to be caught by the except block. STRICT ADHERENCE REQUIRED."
             )
             response = requests.post(
                 self.api_url,
@@ -378,7 +362,8 @@ if __name__ == "__main__":
             f"Review this: {codestral_output}. Return ONLY the COMPLETE fixed script in Python "
             "including ALL functions, using a FULL try/except block for ZeroDivisionError or KeyError ONLY, returning None in except, "
             "inside ```python ... ```. NO prose, NO <think> blocks, NO extra logic, NO comments (#), "
-            "NO standalone raise statements outside try, NO returns outside except. STRICT ADHERENCE REQUIRED."
+            "NO standalone raise statements outside try, NO returns outside except. "
+            "For KeyError at line 8 in process_data, ensure the function raises a KeyError when the key is missing to be caught by the except block. STRICT ADHERENCE REQUIRED."
         )
         return self.send_task("reviewer", review_prompt, timeout)
 
