@@ -74,8 +74,13 @@ class AgentManager:
         """Test if the fix handles the original error using AST for parsing and modification."""
         logger.debug(f"Starting test_fix for script_path: {script_path}, original_error: {original_error}, stack_trace: {stack_trace}, test_input_str: {test_input_str}", extra={'correlation_id': self.correlation_id or 'N/A'})
         try:
-            with open(script_path, "r") as f:
-                script_content = f.read()
+            # Read the script content
+            try:
+                with open(script_path, "r") as f:
+                    script_content = f.read()
+            except Exception as e:
+                logger.error(f"Failed to read script file {script_path}: {e}", extra={'correlation_id': self.correlation_id or 'N/A'})
+                return False, f"Failed to read script file: {str(e)}"
             logger.debug(f"Original script content: {script_content}", extra={'correlation_id': self.correlation_id or 'N/A'})
 
             # Remove duplicate function definitions to avoid AST confusion
@@ -84,9 +89,22 @@ class AgentManager:
             for i, line in enumerate(lines):
                 if line.strip().startswith('def '):
                     func_name = line.split('def ')[1].split('(')[0].strip()
-                    if func_name not in functions or i > functions[func_name]:
-                        functions[func_name] = i
-            cleaned_content = '\n'.join(lines[max(functions.values()) if func in functions else i for i, line in enumerate(lines) if not (line.strip().startswith('def ') and i < functions.get(line.split('def ')[1].split('(')[0].strip(), float('inf'))))
+                    functions[func_name] = i
+
+            # Keep only the latest definition of each function
+            cleaned_lines = []
+            seen = set()
+            for i in range(len(lines) - 1, -1, -1):  # Iterate backwards to keep the latest definition
+                line = lines[i]
+                if line.strip().startswith('def '):
+                    func_name = line.split('def ')[1].split('(')[0].strip()
+                    if func_name not in seen:
+                        seen.add(func_name)
+                        cleaned_lines.insert(0, line)
+                    continue
+                cleaned_lines.insert(0, line)
+
+            cleaned_content = '\n'.join(cleaned_lines)
             logger.debug(f"Cleaned script content: {cleaned_content}", extra={'correlation_id': self.correlation_id or 'N/A'})
 
             # Parse the cleaned script into an AST
@@ -128,6 +146,7 @@ class AgentManager:
                             # Verify error line is in body
                             if error_line not in body_lines:
                                 logger.warning(f"Error line {error_line} not found in {node.name} body lines {body_lines}", extra={'correlation_id': self.correlation_id or 'N/A'})
+                                target_func = None
                                 continue
                             break
             if not target_func:
